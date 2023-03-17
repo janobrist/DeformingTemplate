@@ -41,11 +41,16 @@ if(args['euler']):
     rootData="/hdd/eli"
     train_deformed=rootData+'/ycb_mult_5_one_seq/train/'
     train_src=rootData+'/ycb_mult_5_one_seq/in'
+    val_deformed=rootData+'/ycb_mult_5_one_seq/val/'
+    val_src=rootData+'/ycb_mult_5_one_seq/in'
     path_autoencoder='./first_50_each/logs/model_epoch_9000.pth'
 else:
+    rootData="/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path"
     defomed_model = './nvp_foldingnet_ycb_cosinusAneal_50/'
-    valid_deformed='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/'
-    valid_src='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
+    train_deformed=rootData+'/ycb_mult_5_one_seq/train/'
+    train_src=rootData+'/ycb_mult_5_one_seq/in'
+    valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
+    valid_src=rootData+'/ycb_mult_5_one_seq/in'
     path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each/logs/model_epoch_9000.pth'
 
 B = 8
