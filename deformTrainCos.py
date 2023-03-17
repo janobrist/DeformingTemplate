@@ -44,6 +44,8 @@ if(args['euler']):
     valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
     valid_src=rootData+'/ycb_mult_5_one_seq/in'
     path_autoencoder='./first_50_each/logs/model_epoch_9000.pth'
+    if torch.cuda.is_available():
+        device = torch.device("cuda:3")
 else:
     rootData="/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path"
     defomed_model = './nvp_foldingnet_ycb_cosinusAneal_50/'
@@ -52,6 +54,8 @@ else:
     valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
     valid_src=rootData+'/ycb_mult_5_one_seq/in'
     path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each/logs/model_epoch_9000.pth'
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
 
 B = 8
 #print('before')
@@ -76,11 +80,7 @@ path_load_check_decoder = defomed_model+'check/'+ 'check'+str(3)+'.pt'
 print('args: ', args['load'])
 
 # Set the device
-if torch.cuda.is_available():
-    device = torch.device("cuda:0")
-else:
-    device = torch.device("cpu")
-    print("WARNING: CPU only, this will be slow!")
+
 
 print('device: ', device)
 
@@ -104,11 +104,11 @@ c_dim = 128
 hidden_dim = 128
 
 homeomorphism_decoder = NVP_v2_5_frame(n_layers=n_layers, feature_dims=feature_dims*8, hidden_size=hidden_size, proj_dims=proj_dims,\
-code_proj_hidden_size=code_proj_hidden_size, proj_type=proj_type, block_normalize=block_normalize, normalization=normalization).to('cuda')
+code_proj_hidden_size=code_proj_hidden_size, proj_type=proj_type, block_normalize=block_normalize, normalization=normalization).to(device)
 
 
 network = AutoEncoder()
-device = torch.device('cuda')
+
 network.to(device)
 
 
@@ -172,8 +172,8 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         trg_mesh = Meshes(verts=trg_mesh_verts_rightSize, faces=trg_mesh_faces_rightSize)
         src_mesh = Meshes(verts=src_mesh_verts_rightSize, faces=src_mesh_faces_rightSize)
         
-        seq_pc_trg = sample_points_from_meshes(trg_mesh, 4000).to('cuda')
-        seq_pc_src = sample_points_from_meshes(src_mesh, 4000).to('cuda')
+        seq_pc_trg = sample_points_from_meshes(trg_mesh, 4000).to(device)
+        seq_pc_src = sample_points_from_meshes(src_mesh, 4000).to(device)
 
         with torch.no_grad():
             #print('seq_pc_trg shape: ', seq_pc_trg.shape)
@@ -184,7 +184,7 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         #print('code_trg.shape: ', code_trg.shape)
         b, k = code_trg.shape
 
-        query = item['vertices_src'].to('cuda')
+        query = item['vertices_src'].to(device)
 
         #print('code trg shape: ', code_trg.shape)
         #print('query shape: ', query.shape)
@@ -193,12 +193,12 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         coordinates = coordinates.reshape(B, 9000, 3)
 
         new_src_mesh_verts_rightSize = [coordinates[s][:num_points[s]]for s in range(B)]
-        new_src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]].to('cuda') for s in range(B)]
+        new_src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]].to(device) for s in range(B)]
  
         new_src_mesh = Meshes(verts=new_src_mesh_verts_rightSize, faces=new_src_mesh_faces_rightSize)
 
-        sample_trg = sample_points_from_meshes(trg_mesh, 5000).to('cuda')
-        new_sample_src = sample_points_from_meshes(new_src_mesh, 5000).to('cuda')
+        sample_trg = sample_points_from_meshes(trg_mesh, 5000).to(device)
+        new_sample_src = sample_points_from_meshes(new_src_mesh, 5000).to(device)
 
 
         loss_chamfer, _ = chamfer_distance(sample_trg, new_sample_src)
@@ -258,7 +258,7 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         trg_mesh = Meshes(verts=trg_mesh_verts_rightSize, faces=trg_mesh_faces_rightSize)
         src_mesh = Meshes(verts=src_mesh_verts_rightSize, faces=src_mesh_faces_rightSize)
         
-        seq_pc_trg = sample_points_from_meshes(trg_mesh, 4000).to('cuda')#3000
+        seq_pc_trg = sample_points_from_meshes(trg_mesh, 4000).to(device)#3000
 
 
         with torch.no_grad():
@@ -270,19 +270,19 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         b, k = code_trg.shape
 
         #print('N.shape: ', N)
-        query = item['vertices_src'].to('cuda')#torch.cat(B*[src_mesh.verts_packed().unsqueeze(0)], axis=0)
+        query = item['vertices_src'].to(device)#torch.cat(B*[src_mesh.verts_packed().unsqueeze(0)], axis=0)
 
         with torch.no_grad():
             coordinates = homeomorphism_decoder.forward(code_trg, query)
         coordinates = coordinates.reshape(B, 9000, 3)
 
         new_src_mesh_verts_rightSize = [coordinates[s][:num_points[s]]for s in range(B)]
-        new_src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]].to('cuda') for s in range(B)]
+        new_src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]].to(device) for s in range(B)]
 
         new_src_mesh = Meshes(verts=new_src_mesh_verts_rightSize, faces=new_src_mesh_faces_rightSize)
 
-        sample_trg = sample_points_from_meshes(trg_mesh, 5000).to('cuda')#5000
-        new_sample_src = sample_points_from_meshes(new_src_mesh, 5000).to('cuda')#5000
+        sample_trg = sample_points_from_meshes(trg_mesh, 5000).to(device)#5000
+        new_sample_src = sample_points_from_meshes(new_src_mesh, 5000).to(device)#5000
 
         loss_chamfer, _ = chamfer_distance(sample_trg, new_sample_src)
         #loss_chamfer, _ = chamfer_distance(decode_trg, sample_trg_3000)
