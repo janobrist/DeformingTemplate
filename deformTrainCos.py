@@ -59,10 +59,10 @@ else:
 
 B = 8
 #print('before')
-training_dataset = Dataset_mesh_objects(trg_root=train_deformed, src_root=train_src)
+training_dataset = Dataset_mesh_objects(trg_root=train_deformed, src_root=train_src, device=device)
 train_dataloader = DataLoader(training_dataset, batch_size=B, shuffle=True, collate_fn=collate_fn)
 
-valid_dataset = Dataset_mesh_objects(trg_root=valid_deformed, src_root=valid_src)
+valid_dataset = Dataset_mesh_objects(trg_root=valid_deformed, src_root=valid_src, device=device)
 valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=True, collate_fn=collate_fn)
 #print('after')
 
