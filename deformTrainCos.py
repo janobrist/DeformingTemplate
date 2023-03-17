@@ -41,8 +41,8 @@ if(args['euler']):
     rootData="/hdd/eli"
     train_deformed=rootData+'/ycb_mult_5_one_seq/train/'
     train_src=rootData+'/ycb_mult_5_one_seq/in'
-    val_deformed=rootData+'/ycb_mult_5_one_seq/val/'
-    val_src=rootData+'/ycb_mult_5_one_seq/in'
+    valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
+    valid_src=rootData+'/ycb_mult_5_one_seq/in'
     path_autoencoder='./first_50_each/logs/model_epoch_9000.pth'
 else:
     rootData="/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path"
