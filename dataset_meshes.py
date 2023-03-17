@@ -54,17 +54,13 @@ class Dataset_mesh(Dataset):
         return self.samples[idx]
 
 class Dataset_mesh_objects(Dataset):
-    def __init__(self, trg_root, src_root):
+    def __init__(self, trg_root, src_root, device):
         self.trg_root = trg_root
         self.src_root = src_root
         self.paths = []
         i = 0
 
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda:0")
-        else:
-            self.device = torch.device("cpu")
-            print("WARNING: CPU only, this will be slow!")
+        self.device=device
 
         for meshTrgFile in os.listdir(self.trg_root):
             ##########################################################################################################################
@@ -144,6 +140,7 @@ def collate_fn(data):
              and label/length are scalars
     """
     #print('data[0]: ', data[0])
+    device='cuda:3'
     maxPoints = 9000
     maxFaces = 25000
     #_, labels, lengths = zip(*data)
@@ -163,8 +160,8 @@ def collate_fn(data):
         num_faces = data[i]['num_faces']
         #print('faces trg shape: ', faces_trg.shape)
         #print('vertices trg shape: ', verts_trg.shape)
-        features_verts_trg[i] = torch.cat((verts_trg, torch.zeros((maxPoints - num_points, 3)).to('cuda')), dim=0)
-        features_faces_trg[i] = torch.cat((faces_trg, torch.zeros((maxFaces - num_faces, 3)).to('cuda')), dim=0)
+        features_verts_trg[i] = torch.cat((verts_trg, torch.zeros((maxPoints - num_points, 3)).to(device)), dim=0)
+        features_faces_trg[i] = torch.cat((faces_trg, torch.zeros((maxFaces - num_faces, 3)).to(device)), dim=0)
 
         
         verts_src = data[i]['vertices_src']
@@ -172,8 +169,8 @@ def collate_fn(data):
         #print('faces src shape: ', faces_src.shape)
         #num_points = data[i]['num_points']
         #num_faces = data[i]['num_faces']
-        features_verts_src[i] = torch.cat((verts_src, torch.zeros((maxPoints - num_points, 3)).to('cuda')), dim=0)
-        features_faces_src[i] = torch.cat((faces_src, torch.zeros((maxFaces - num_faces, 3)).to('cuda')), dim=0)
+        features_verts_src[i] = torch.cat((verts_src, torch.zeros((maxPoints - num_points, 3)).to(device)), dim=0)
+        features_faces_src[i] = torch.cat((faces_src, torch.zeros((maxFaces - num_faces, 3)).to(device)), dim=0)
 
         #print('features shape: ', features_verts_src[i].shape)
         #print('faces: ', data[i]['faces_src'].shape)
