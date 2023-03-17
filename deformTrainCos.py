@@ -30,15 +30,30 @@ import open3d as o3d
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
+parser = argparse.ArgumentParser(description="Just an example", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument("-l", "--load", action="store_true", help="checksum blocksize")
+parser.add_argument("-e", "--euler", action="store_true", help="checksum blocksize")
+args = vars(parser.parse_args())
 
-defomed_model = './nvp_foldingnet_ycb_cosinusAneal_50/'
+
+if(args['euler']):
+    defomed_model = '/hdd/eli/nvp_foldingnet_ycb_cosinusAneal_50/'
+    rootData="/hdd/eli"
+    train_deformed=rootData+'/ycb_mult_5_one_seq/train/'
+    train_src=rootData+'/ycb_mult_5_one_seq/in'
+    path_autoencoder='./first_50_each/logs/model_epoch_9000.pth'
+else:
+    defomed_model = './nvp_foldingnet_ycb_cosinusAneal_50/'
+    valid_deformed='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/'
+    valid_src='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
+    path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each/logs/model_epoch_9000.pth'
+
 B = 8
-path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each/logs/model_epoch_9000.pth'
 #print('before')
-training_dataset = Dataset_mesh_objects(trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/train/', src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in')
+training_dataset = Dataset_mesh_objects(trg_root=train_deformed, src_root=train_src)
 train_dataloader = DataLoader(training_dataset, batch_size=B, shuffle=True, collate_fn=collate_fn)
 
-valid_dataset = Dataset_mesh_objects(trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/', src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in')
+valid_dataset = Dataset_mesh_objects(trg_root=valid_deformed, src_root=valid_src)
 valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=True, collate_fn=collate_fn)
 #print('after')
 
@@ -52,9 +67,7 @@ path_load_check_decoder = defomed_model+'check/'+ 'check'+str(3)+'.pt'
 #print('path:' ,path)
 
 #print('here')
-parser = argparse.ArgumentParser(description="Just an example", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument("-l", "--load", action="store_true", help="checksum blocksize")
-args = vars(parser.parse_args())
+
 print('args: ', args['load'])
 
 # Set the device
