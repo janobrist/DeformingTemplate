@@ -69,21 +69,21 @@ class Autoencoder(nn.Module):
             b, _, num_points = x.size()
             #print('shape of x: ', x.shape)
             x = x.permute( (0, 2, 1))
-            print('shape of x after permutation: ', x.shape) #[5,3000,3]
+            #print('shape of x after permutation: ', x.shape) #[5,3000,3]
             #print('num_points: ', num_points)
             encoding = self.homeomorphism_encoder(x)
             b, k = encoding.shape
             encoding = encoding.reshape(b,k,1)
         elif(encode == 'auto2018' ):
-            print('size of x: ', x.size())
+            #print('size of x: ', x.size())
             b, _, num_points = x.size()
             x = self.pointwise_layers(x)  # shape [b, k, num_points]
             encoding = self.pooling(x)  # shape [b, k, 1]
 
 
-        print('encoding shape: ', encoding.shape) # 16, 256, 1
+        #print('encoding shape: ', encoding.shape) # 16, 256, 1
         x = self.decoder(encoding)  # shape [b, num_points * 3, 1]
-        print('x shape before viewing: ', x.shape)
+        #print('x shape before viewing: ', x.shape)
         restoration = x.view(b, 3, num_points)
 
         return encoding, restoration
