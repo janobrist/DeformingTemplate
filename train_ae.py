@@ -2,10 +2,16 @@ import argparse
 import os
 import time
 
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.nn.init as init
+
 import torch
 import torch.optim as optim
 import numpy as np
 from foldingNet_model import AutoEncoder
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from model import Autoencoder
 from pytorch3d.loss import (
     chamfer_distance, 
     mesh_edge_loss, 
@@ -16,43 +22,83 @@ from torch.utils.tensorboard import SummaryWriter
 from dataset import PointClouds
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--root', type=str, default='/home/rico/Workspace/Dataset/shapenet_part/shapenetcore_partanno_segmentation_benchmark_v0')
-parser.add_argument('--npoints', type=int, default=3048)
-parser.add_argument('--mpoints', type=int, default=3048)
 parser.add_argument('--batch_size', type=int, default=16)
 parser.add_argument('--lr', type=float, default=1e-4)
 parser.add_argument('--weight_decay', type=float, default=1e-6)
-parser.add_argument('--epochs', type=int, default=10000)
+parser.add_argument('--epochs', type=int, default=1000000)
 parser.add_argument('--num_workers', type=int, default=4)
-parser.add_argument('--name_conf', type=str, default='./first_50_each/')
+
+parser.add_argument('--encoder_type', type=str, default='2018')
 parser.add_argument('--load', action='store_true')
+parser.add_argument("-e", "--euler", action="store_true", help="checksum blocksize")
 args = parser.parse_args()
 
 
-os.makedirs(args.name_conf+'events', exist_ok=True)
-os.makedirs(args.name_conf+'logs', exist_ok=True)
-args.log_dir =args.name_conf+'logs'
-args.events = args.name_conf+'events'
+
 # prepare training and testing dataset
-train_dataset = PointClouds('/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/train', is_training=True)
-test_dataset = PointClouds('/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val', is_training=True)
+numOfPoints = 4000
+
+
+# device
+if(args.euler):
+    defomed_model = '/hdd/eli/nvp_foldingnet_ycb_cosinusAneal_50/'
+    rootData="/hdd/eli"
+    train_deformed=rootData+'/ycb_mult_5_one_seq/train/'
+    train_src=rootData+'/ycb_mult_5_one_seq/in'
+    valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
+    path_autoencoder='/hdd/eli/first_50_each_2018_1024dim/'
+    if torch.cuda.is_available():
+        device = torch.device("cuda:2")
+else:
+    defomed_model = './nvp_foldingnet_ycb_cosinusAneal_50_test/'
+    rootData="/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path"
+    train_deformed=rootData+'/ycb_mult_5_one_seq/train/'
+    train_src=rootData+'/ycb_mult_5_one_seq/in'
+    valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
+    path_autoencoder='./first_50_each_2018_1024dim/'
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+
+train_dataset = PointClouds(train_deformed, is_training=True, num_points=numOfPoints)
+test_dataset = PointClouds(valid_deformed, is_training=True, num_points=numOfPoints)
 #train_dataset = ShapeNetPartDataset(root=args.root, npoints=args.npoints, split='train', classification=False, data_augmentation=True)
 #test_dataset = ShapeNetPartDataset(root=args.root, npoints=args.npoints, split='test', classification=False, data_augmentation=True)
 train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
-# device
-device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+#str(args.encoder_type)
+os.makedirs(path_autoencoder+'events', exist_ok=True)
+os.makedirs(path_autoencoder+'logs', exist_ok=True)
+args.log_dir =path_autoencoder+'logs'
+args.events = path_autoencoder+'events'
+
 
 # model
-autoencoder = AutoEncoder()
+if(args.encoder_type == '2018'):
+    def weights_init(m):
+        if isinstance(m, nn.Conv1d):
+            init.kaiming_uniform_(m.weight)
+            if m.bias is not None:
+                init.zeros_(m.bias)
+        elif isinstance(m, nn.BatchNorm1d):
+            init.ones_(m.weight)
+            init.zeros_(m.bias)
+
+    autoencoder = Autoencoder(k=1024, num_points=numOfPoints).to(device)
+    autoencoder = autoencoder.apply(weights_init).to(device)
+elif(args.encoder_type == 'folding'):
+    autoencoder = AutoEncoder()
+
 autoencoder.to(device)
 
 # loss function
 # optimizer
-optimizer = optim.Adam(autoencoder.parameters(), lr=args.lr, betas=[0.9, 0.999], weight_decay=args.weight_decay)
-
-batches = int(len(train_dataset) / args.batch_size + 0.5)
+#optimizer = optim.Adam(autoencoder.parameters(), lr=args.lr, betas=[0.9, 0.999], weight_decay=args.weight_decay)
+num_steps = args.epochs * (len(train_dataset) // args.batch_size)
+optimizer = optim.Adam(autoencoder.parameters(), lr=5e-4, weight_decay=1e-5)
+scheduler = CosineAnnealingLR(optimizer, T_max=num_steps, eta_min=1e-7)
+#batches = int(len(train_dataset) / args.batch_size + 0.5)
 
 min_cd_loss = 1e3
 best_epoch = -1
@@ -82,7 +128,8 @@ for epoch in range(epoch_start, args.epochs + 1):
     for data, path, mean, scale in train_dataloader:
         point_clouds = data
         point_clouds = point_clouds.to(device)
-        recons = autoencoder(point_clouds)
+        _, recons = autoencoder(point_clouds)
+        print('recons shape: ', recons.shape)
         ls = chamfer_distance(point_clouds.permute(0, 2, 1), recons.permute(0, 2, 1))[0]
         print('train loss: ', ls)
         losses.append(ls.detach().cpu())
@@ -91,6 +138,7 @@ for epoch in range(epoch_start, args.epochs + 1):
         optimizer.zero_grad()
         ls.backward()
         optimizer.step()
+        scheduler.step()
         
         #q+=1
         #print('q: ', q)
@@ -114,7 +162,7 @@ for epoch in range(epoch_start, args.epochs + 1):
         for data, path, mean, scale in test_dataloader:
             point_clouds = data
             point_clouds = point_clouds.to(device)
-            recons = autoencoder(point_clouds)
+            _, recons = autoencoder(point_clouds)
             ls = chamfer_distance(point_clouds.permute(0, 2, 1), recons.permute(0, 2, 1))
             print('valid loss: ', ls)
             losses.append(ls[0].detach().cpu())

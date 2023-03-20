@@ -47,8 +47,8 @@ if(args['euler']):
     if torch.cuda.is_available():
         device = torch.device("cuda:3")
 else:
+    defomed_model = './nvp_foldingnet_ycb_cosinusAneal_50_test/'
     rootData="/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path"
-    defomed_model = './nvp_foldingnet_ycb_cosinusAneal_50/'
     train_deformed=rootData+'/ycb_mult_5_one_seq/train/'
     train_src=rootData+'/ycb_mult_5_one_seq/in'
     valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
@@ -173,7 +173,7 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         src_mesh = Meshes(verts=src_mesh_verts_rightSize, faces=src_mesh_faces_rightSize)
         
         seq_pc_trg = sample_points_from_meshes(trg_mesh, 4000).to(device)
-        seq_pc_src = sample_points_from_meshes(src_mesh, 4000).to(device)
+        #seq_pc_src = sample_points_from_meshes(src_mesh, 4000).to(device)
 
         with torch.no_grad():
             #print('seq_pc_trg shape: ', seq_pc_trg.shape)
@@ -197,8 +197,9 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
  
         new_src_mesh = Meshes(verts=new_src_mesh_verts_rightSize, faces=new_src_mesh_faces_rightSize)
 
-        sample_trg = sample_points_from_meshes(trg_mesh, 5000).to(device)
-        new_sample_src = sample_points_from_meshes(new_src_mesh, 5000).to(device)
+        numberOfSampledPoints = 5000
+        sample_trg = sample_points_from_meshes(trg_mesh, numberOfSampledPoints).to(device)
+        new_sample_src = sample_points_from_meshes(new_src_mesh, numberOfSampledPoints).to(device)
 
 
         loss_chamfer, _ = chamfer_distance(sample_trg, new_sample_src)
@@ -281,8 +282,9 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
 
         new_src_mesh = Meshes(verts=new_src_mesh_verts_rightSize, faces=new_src_mesh_faces_rightSize)
 
-        sample_trg = sample_points_from_meshes(trg_mesh, 5000).to(device)#5000
-        new_sample_src = sample_points_from_meshes(new_src_mesh, 5000).to(device)#5000
+        numberOfSampledPoints = 5000
+        sample_trg = sample_points_from_meshes(trg_mesh, numberOfSampledPoints).to(device)#5000
+        new_sample_src = sample_points_from_meshes(new_src_mesh, numberOfSampledPoints).to(device)#5000
 
         loss_chamfer, _ = chamfer_distance(sample_trg, new_sample_src)
         #loss_chamfer, _ = chamfer_distance(decode_trg, sample_trg_3000)

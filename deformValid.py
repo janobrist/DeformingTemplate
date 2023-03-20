@@ -31,11 +31,11 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
-defomed_model = './nvp_foldingnet_ycb_cosinusAneal/'
+defomed_model = './nvp_foldingnet_ycb_cosinusAneal_50/'
 B = 4
-path_autoencoder='/home/elham/Desktop/FoldingNet/first/logs/model_lowest_cd_loss.pth'
-
-valid_dataset = Dataset_mesh_objects(trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_new_5_off/val/', src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_new_5_off/in')
+path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each/logs/model_epoch_9000.pth'
+device='cuda:0'
+valid_dataset = Dataset_mesh_objects(trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/train/', src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in', device=device)
 valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=True, collate_fn=collate_fn)
 #print('after')
 
@@ -100,7 +100,7 @@ print('here2')
 #optimizer = torch.optim.SGD([homeomorphism_decoder.parameters()], lr=lr, momentum=0.0)
 
 if(args['load']):
-    checkpoint = torch.load(path_load_check_decoder)
+    checkpoint = torch.load(path_load_check_decoder, map_location='cuda:0')
     #homeomorphism_encoder.load_state_dict(checkpoint['encoder'])
     homeomorphism_decoder.load_state_dict(checkpoint['decoder'])
     #optimizer.load_state_dict(checkpoint['optimizer'])

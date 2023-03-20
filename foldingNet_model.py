@@ -173,11 +173,11 @@ class AutoEncoder(nn.Module):
 
     def forward(self, x):
         #print('shape of x before encoding: ', x.shape)
-        x = self.encoder(x)
+        encoding = self.encoder(x)
         #print('encoding shape: ', x.shape)
-        x = self.decoder(x)
+        restoration = self.decoder(encoding)
         #print('after decoding the shape is : ', x.shape)
-        return x
+        return encoding, restoration
 
 
 if __name__ == '__main__':

@@ -1,8 +1,10 @@
 import torch
+import argparse
 import numpy as np
 from foldingNet_model import AutoEncoder
 #from chamfer_distance.chamfer_distance import ChamferDistance
 from dataset import PointClouds
+from model import Autoencoder
 import trimesh 
 import os
 import open3d as o3d
@@ -12,9 +14,12 @@ from pytorch3d.loss import (
     mesh_laplacian_smoothing, 
     mesh_normal_consistency,
 )
+parser = argparse.ArgumentParser()
+parser.add_argument('--encoder_type', type=str, default='folding')
+args = parser.parse_args()
 
-
-test_dataset = PointClouds('/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val', is_training=True)
+numOfPoints = 4000
+test_dataset = PointClouds('/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val', is_training=True, num_points=numOfPoints)
 
 #test_dataset = ShapeNetPartDataset(root='/home/rico/Workspace/Dataset/shapenet_part/shapenetcore_partanno_segmentation_benchmark_v0',
 #                                   npoints=2048, split='test', classification=False, data_augmentation=True)
@@ -27,18 +32,32 @@ test_dataset = PointClouds('/home/elham/Desktop/makeDataset/warping/warping_shap
 #test_dataset = 
 
 test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=4, shuffle=False, num_workers=4)
-modelFoldingNet = AutoEncoder()
-folder='/home/elham/Desktop/FoldingNet/first_50_each'
+if(args.encoder_type == '2018'):
+    def weights_init(m):
+        if isinstance(m, nn.Conv1d):
+            init.kaiming_uniform_(m.weight)
+            if m.bias is not None:
+                init.zeros_(m.bias)
+        elif isinstance(m, nn.BatchNorm1d):
+            init.ones_(m.weight)
+            init.zeros_(m.bias)
+
+    autoencoder = Autoencoder(k=1024, num_points=numOfPoints).to(device)
+    autoencoder = autoencoder.apply(weights_init).to(device)
+elif(args.encoder_type == 'folding'):
+    autoencoder = AutoEncoder()
+
+folder='/home/elham/Desktop/FoldingNet/first_50_each_test'
 os.makedirs(folder+'/plies/', exist_ok=True)
 dict = torch.load(folder+'/logs/model_epoch_9000.pth')
-modelFoldingNet.load_state_dict(dict["model_state_dict"])
+autoencoder.load_state_dict(dict["model_state_dict"])
 device = torch.device('cuda')
-modelFoldingNet.to(device)
+autoencoder.to(device)
 
 #cd_loss = ChamferDistance()
 
 # evaluation
-modelFoldingNet.eval()
+autoencoder.eval()
 total_cd_loss = 0
 
 with torch.no_grad():
@@ -55,7 +74,7 @@ with torch.no_grad():
         point_clouds = point_clouds#.permute(0, 2, 1)
         point_clouds = point_clouds.to(device)
         print('pointclouds shape: ', point_clouds.shape)
-        recons = modelFoldingNet(point_clouds)
+        _, recons = autoencoder(point_clouds)
         #print('recons shape: ', recons[0,...].permute(1,0).shape)
         os.environ['PYOPENGL_PLATFORM'] = 'egl'
         #color = np.ones_like(recons[0,...].permute(1,0).cpu().numpy())

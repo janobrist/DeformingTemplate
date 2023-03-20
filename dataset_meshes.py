@@ -54,13 +54,11 @@ class Dataset_mesh(Dataset):
         return self.samples[idx]
 
 class Dataset_mesh_objects(Dataset):
-    def __init__(self, trg_root, src_root, device):
+    def __init__(self, trg_root, src_root):
         self.trg_root = trg_root
         self.src_root = src_root
         self.paths = []
         i = 0
-
-        self.device=device
 
         for meshTrgFile in os.listdir(self.trg_root):
             ##########################################################################################################################
@@ -87,8 +85,8 @@ class Dataset_mesh_objects(Dataset):
         verts_trg_obj = torch.tensor(verts_trg_obj).float()
         #print('verts shape: ', verts_obj.shape)
         #print('faces shape: ', faces_obj.shape)
-        faces_trg_idx_obj = faces_trg_obj.to(self.device)
-        verts_trg_obj = verts_trg_obj.to(self.device)
+        faces_trg_idx_obj = faces_trg_obj#.to(self.device)
+        verts_trg_obj = verts_trg_obj#.to(self.device)
         center_trg_obj = verts_trg_obj.mean(0)
 
         verts_trg_obj = verts_trg_obj - center_trg_obj
@@ -121,8 +119,8 @@ class Dataset_mesh_objects(Dataset):
         verts_src_obj = torch.tensor(verts_src_obj).float()
         #print('verts shape: ', verts_obj.shape)
         #print('faces shape: ', faces_obj.shape)
-        faces_src_idx_obj = faces_src_obj.to(self.device)
-        verts_src_obj = verts_src_obj.to(self.device)
+        faces_src_idx_obj = faces_src_obj#.to(self.device)
+        verts_src_obj = verts_src_obj#.to(self.device)
         center_src_obj = verts_src_obj.mean(0)
 
         verts_src_obj = verts_src_obj - center_src_obj
@@ -140,7 +138,7 @@ def collate_fn(data):
              and label/length are scalars
     """
     #print('data[0]: ', data[0])
-    device='cuda:3'
+    #device='cuda:0'
     maxPoints = 9000
     maxFaces = 25000
     #_, labels, lengths = zip(*data)
@@ -160,8 +158,8 @@ def collate_fn(data):
         num_faces = data[i]['num_faces']
         #print('faces trg shape: ', faces_trg.shape)
         #print('vertices trg shape: ', verts_trg.shape)
-        features_verts_trg[i] = torch.cat((verts_trg, torch.zeros((maxPoints - num_points, 3)).to(device)), dim=0)
-        features_faces_trg[i] = torch.cat((faces_trg, torch.zeros((maxFaces - num_faces, 3)).to(device)), dim=0)
+        features_verts_trg[i] = torch.cat((verts_trg, torch.zeros((maxPoints - num_points, 3))), dim=0)
+        features_faces_trg[i] = torch.cat((faces_trg, torch.zeros((maxFaces - num_faces, 3))), dim=0)
 
         
         verts_src = data[i]['vertices_src']
@@ -169,8 +167,8 @@ def collate_fn(data):
         #print('faces src shape: ', faces_src.shape)
         #num_points = data[i]['num_points']
         #num_faces = data[i]['num_faces']
-        features_verts_src[i] = torch.cat((verts_src, torch.zeros((maxPoints - num_points, 3)).to(device)), dim=0)
-        features_faces_src[i] = torch.cat((faces_src, torch.zeros((maxFaces - num_faces, 3)).to(device)), dim=0)
+        features_verts_src[i] = torch.cat((verts_src, torch.zeros((maxPoints - num_points, 3))), dim=0)
+        features_faces_src[i] = torch.cat((faces_src, torch.zeros((maxFaces - num_faces, 3))), dim=0)
 
         #print('features shape: ', features_verts_src[i].shape)
         #print('faces: ', data[i]['faces_src'].shape)
