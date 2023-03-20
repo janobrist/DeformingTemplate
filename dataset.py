@@ -11,7 +11,7 @@ from pytorch3d.ops import sample_points_from_meshes
 
 class PointClouds(Dataset):
 
-    def __init__(self, dataset_path, is_training=False):
+    def __init__(self, dataset_path, is_training=False, num_points=4000):
         """
         Arguments:
             is_training: a boolean.
@@ -32,6 +32,7 @@ class PointClouds(Dataset):
         #paths = [p for p in paths if get_label(p) in labels]
         self.is_training = is_training
         self.paths = paths
+        self.num_points = num_points
 
     def __len__(self):
         return len(self.paths)
@@ -43,7 +44,7 @@ class PointClouds(Dataset):
         """
         
         p = self.paths[i]
-        x = load_ply(p)
+        x = self.load_ply(p)
 
         meanOf = x.mean(0)
         
@@ -68,39 +69,39 @@ class PointClouds(Dataset):
         return x, p.split('/')[-1].split('.')[-2], meanOf, d
 
 
-def load_ply(filename):
-    """
-    Arguments:
-        filename: a string.
-    Returns:
-        a float numpy array with shape [num_points, 3].
-    """
-    #ply_data = PlyData.read(filename)
-    mesh_obj=trimesh.load(filename)
-    verts_obj = mesh_obj.vertices
-    if(filename.endswith('ply')):
-        points = verts_obj
-    else:
-        faces_obj = mesh_obj.faces
-        faces_obj = torch.tensor(faces_obj).float()#.to('cuda')
-        verts_obj = torch.tensor(verts_obj).float()#.to('cuda')
-        #print('verts shape: ', verts_obj.shape)
-        #print('faces shape: ', faces_obj.shape)
-        #faces_idx_obj = faces_obj.to(device)
-        #verts_obj = verts_obj.to(device)
-        #print('verts obj shape: ', verts_obj.shape)
-        #print('faces obj shape: ', faces_obj.shape)
-        mesh = Meshes(verts=list(verts_obj.reshape(1, -1, 3)), faces=list(faces_obj.reshape(1, -1, 3)))
-        points = sample_points_from_meshes(mesh, 4000).reshape(-1, 3)
-    #print('the shape of points: ', points.shape)
-    #print('points.shape: ', points.shape)
-    #verts_obj = torch.tensor(verts_obj).float()
-    #points = ply_data['vertex']
-    #points = np.vstack([points['x'], points['y'], points['z']]).T
-    #print('points: ', points.shape)
+    def load_ply(self, filename):
+        """
+        Arguments:
+            filename: a string.
+        Returns:
+            a float numpy array with shape [num_points, 3].
+        """
+        #ply_data = PlyData.read(filename)
+        mesh_obj=trimesh.load(filename)
+        verts_obj = mesh_obj.vertices
+        if(filename.endswith('ply')):
+            points = verts_obj
+        else:
+            faces_obj = mesh_obj.faces
+            faces_obj = torch.tensor(faces_obj).float()#.to('cuda')
+            verts_obj = torch.tensor(verts_obj).float()#.to('cuda')
+            #print('verts shape: ', verts_obj.shape)
+            #print('faces shape: ', faces_obj.shape)
+            #faces_idx_obj = faces_obj.to(device)
+            #verts_obj = verts_obj.to(device)
+            #print('verts obj shape: ', verts_obj.shape)
+            #print('faces obj shape: ', faces_obj.shape)
+            mesh = Meshes(verts=list(verts_obj.reshape(1, -1, 3)), faces=list(faces_obj.reshape(1, -1, 3)))
+            points = sample_points_from_meshes(mesh, self.num_points).reshape(-1, 3)
+        #print('the shape of points: ', points.shape)
+        #print('points.shape: ', points.shape)
+        #verts_obj = torch.tensor(verts_obj).float()
+        #points = ply_data['vertex']
+        #points = np.vstack([points['x'], points['y'], points['z']]).T
+        #print('points: ', points.shape)
 
-    # color = np.ones_like(points)
-    # cloud = trimesh.PointCloud(vertices=points, colors=color)
-    # cloud.show(background=[0,0,0,0])
-    return points#.astype('float32')
+        # color = np.ones_like(points)
+        # cloud = trimesh.PointCloud(vertices=points, colors=color)
+        # cloud.show(background=[0,0,0,0])
+        return points#.astype('float32')
 
