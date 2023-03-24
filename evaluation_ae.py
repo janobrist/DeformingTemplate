@@ -4,7 +4,13 @@ import numpy as np
 from foldingNet_model import AutoEncoder
 #from chamfer_distance.chamfer_distance import ChamferDistance
 from dataset import PointClouds
-from model import Autoencoder
+from modelAya import Autoencoder
+
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.nn.init as init
+
+
 import trimesh 
 import os
 import open3d as o3d
@@ -15,10 +21,10 @@ from pytorch3d.loss import (
     mesh_normal_consistency,
 )
 parser = argparse.ArgumentParser()
-parser.add_argument('--encoder_type', type=str, default='folding')
+parser.add_argument('--encoder_type', type=str, default='2018')
 args = parser.parse_args()
 
-numOfPoints = 4000
+numOfPoints =  3000
 test_dataset = PointClouds('/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val', is_training=True, num_points=numOfPoints)
 
 #test_dataset = ShapeNetPartDataset(root='/home/rico/Workspace/Dataset/shapenet_part/shapenetcore_partanno_segmentation_benchmark_v0',
@@ -30,7 +36,7 @@ test_dataset = PointClouds('/home/elham/Desktop/makeDataset/warping/warping_shap
 #train_dataloader = DataLoader(training_dataset, batch_size=B, shuffle=True, collate_fn=collate_fn)
 
 #test_dataset = 
-
+device='cuda:0'
 test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=4, shuffle=False, num_workers=4)
 if(args.encoder_type == '2018'):
     def weights_init(m):
@@ -47,10 +53,19 @@ if(args.encoder_type == '2018'):
 elif(args.encoder_type == 'folding'):
     autoencoder = AutoEncoder()
 
-folder='/home/elham/Desktop/FoldingNet/first_50_each_test'
+#folder='/home/elham/Desktop/FoldingNet/first_50_each_2018_256dim'
+folder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb'
 os.makedirs(folder+'/plies/', exist_ok=True)
-dict = torch.load(folder+'/logs/model_epoch_9000.pth')
-autoencoder.load_state_dict(dict["model_state_dict"])
+if(args['encoder_type'] == '2018'):
+    dict = torch.load(folder+'/models/check_min.pt', map_location='cuda:0')
+    autoencoder.load_state_dict(dict["model"])
+else:
+    dict = torch.load(folder+'/logs/model_lowest_cd_loss.pth', map_location='cuda:0')
+    autoencoder.load_state_dict(dict["model_state_dict"])
+
+
+#autoencoder.load_state_dict(dict["model_state_dict"])
+#autoencoder.load_state_dict(dict["model"])
 device = torch.device('cuda')
 autoencoder.to(device)
 

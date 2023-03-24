@@ -86,4 +86,4 @@ class Autoencoder(nn.Module):
         #print('x shape before viewing: ', x.shape)
         restoration = x.view(b, 3, num_points)
 
-        return encoding, restoration
+        return encoding.squeeze(2), restoration

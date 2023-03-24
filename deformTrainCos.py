@@ -26,6 +26,9 @@ import random
 from foldingNet_model import AutoEncoder
 import torch.nn.init as init
 
+from modelAya import Autoencoder
+#from model import Autoencoder
+
 import open3d as o3d
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -33,36 +36,39 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 parser = argparse.ArgumentParser(description="Just an example", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("-l", "--load", action="store_true", help="checksum blocksize")
 parser.add_argument("-e", "--euler", action="store_true", help="checksum blocksize")
+parser.add_argument('--encoder_type', type=str, default='2018')
 args = vars(parser.parse_args())
 
 
 if(args['euler']):
-    defomed_model = '/hdd/eli/nvp_foldingnet_ycb_cosinusAneal_50/'
+    defomed_model = '/hdd/eli/nvp_2018_1024dim_ycb_cosinusAneal_50/'
     rootData="/hdd/eli"
     train_deformed=rootData+'/ycb_mult_5_one_seq/train/'
     train_src=rootData+'/ycb_mult_5_one_seq/in'
     valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
     valid_src=rootData+'/ycb_mult_5_one_seq/in'
-    path_autoencoder='./first_50_each/logs/model_epoch_9000.pth'
+    #path_autoencoder='./first_50_each_2018_1024dim/logs/model_lowest_cd_loss.pth'
+    path_autoencoder='./auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
     if torch.cuda.is_available():
         device = torch.device("cuda:3")
 else:
-    defomed_model = './nvp_foldingnet_ycb_cosinusAneal_50_test/'
+    defomed_model = './nvp_2018_1024dim_ycb_cosinusAneal_50/'
     rootData="/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path"
     train_deformed=rootData+'/ycb_mult_5_one_seq/train/'
     train_src=rootData+'/ycb_mult_5_one_seq/in'
     valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
     valid_src=rootData+'/ycb_mult_5_one_seq/in'
-    path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each/logs/model_epoch_9000.pth'
+    #path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each_2018_1024dim/logs/model_lowest_cd_loss.pth'
+    path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
 
 B = 8
 #print('before')
-training_dataset = Dataset_mesh_objects(trg_root=train_deformed, src_root=train_src, device=device)
+training_dataset = Dataset_mesh_objects(trg_root=train_deformed, src_root=train_src)
 train_dataloader = DataLoader(training_dataset, batch_size=B, shuffle=True, collate_fn=collate_fn)
 
-valid_dataset = Dataset_mesh_objects(trg_root=valid_deformed, src_root=valid_src, device=device)
+valid_dataset = Dataset_mesh_objects(trg_root=valid_deformed, src_root=valid_src)
 valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=True, collate_fn=collate_fn)
 #print('after')
 
@@ -105,15 +111,21 @@ hidden_dim = 128
 
 homeomorphism_decoder = NVP_v2_5_frame(n_layers=n_layers, feature_dims=feature_dims*8, hidden_size=hidden_size, proj_dims=proj_dims,\
 code_proj_hidden_size=code_proj_hidden_size, proj_type=proj_type, block_normalize=block_normalize, normalization=normalization).to(device)
+numOfPoints=3000
 
-
-network = AutoEncoder()
+if(args['encoder_type'] == '2018'):
+    network = Autoencoder(k=1024, num_points=numOfPoints).to(device)
+elif(args['encoder_type'] == 'folding'):
+    network = AutoEncoder()
 
 network.to(device)
 
 
-check_auto = torch.load(path_autoencoder)
-network.load_state_dict(check_auto["model_state_dict"])
+check_auto = torch.load(path_autoencoder, map_location='cuda:0')
+if(args['encoder_type'] == '2018'):
+    network.load_state_dict(check_auto["model"])
+else:
+    network.load_state_dict(check_auto["model_state_dict"])
 
 #print('here2')
 #optimizer = optim.Adam(homeomorphism_decoder.parameters(), lr=5e-4, weight_decay=1e-5)
@@ -121,7 +133,7 @@ optimizer = optim.Adam(homeomorphism_decoder.parameters(), lr=5e-4, weight_decay
 scheduler = CosineAnnealingLR(optimizer, T_max=10000, eta_min=1e-7)
 
 if(args['load']):
-    checkpoint = torch.load(path_load_check_decoder)
+    checkpoint = torch.load(path_load_check_decoder, map_location='cuda:0')
     #homeomorphism_encoder.load_state_dict(checkpoint['encoder'])
     homeomorphism_decoder.load_state_dict(checkpoint['decoder'])
     optimizer.load_state_dict(checkpoint['optimizer'])
@@ -172,16 +184,18 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         trg_mesh = Meshes(verts=trg_mesh_verts_rightSize, faces=trg_mesh_faces_rightSize)
         src_mesh = Meshes(verts=src_mesh_verts_rightSize, faces=src_mesh_faces_rightSize)
         
-        seq_pc_trg = sample_points_from_meshes(trg_mesh, 4000).to(device)
+        seq_pc_trg = sample_points_from_meshes(trg_mesh, numOfPoints).to(device)
         #seq_pc_src = sample_points_from_meshes(src_mesh, 4000).to(device)
 
         with torch.no_grad():
             #print('seq_pc_trg shape: ', seq_pc_trg.shape)
-            
-            code_trg = network.encoder(seq_pc_trg.permute(0, 2, 1))
+            if(args['encoder_type'] == '2018'):
+                code_trg , _ = network(seq_pc_trg.permute(0, 2, 1))
+            else:
+                code_trg = network.encoder(seq_pc_trg.permute(0, 2, 1))
 
         
-        #print('code_trg.shape: ', code_trg.shape)
+        print('code_trg.shape: ', code_trg.shape)
         b, k = code_trg.shape
 
         query = item['vertices_src'].to(device)
@@ -196,6 +210,7 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         new_src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]].to(device) for s in range(B)]
  
         new_src_mesh = Meshes(verts=new_src_mesh_verts_rightSize, faces=new_src_mesh_faces_rightSize)
+        print('new_src_mesh device: ', new_src_mesh.device)
 
         numberOfSampledPoints = 5000
         sample_trg = sample_points_from_meshes(trg_mesh, numberOfSampledPoints).to(device)
@@ -221,14 +236,14 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
             lr = param_group['lr']
             #q+=1
             #print('q: ', q)
-
+        #break
         writer.add_scalar("train/loss_iteration", loss, iteration)
         iteration+=1
         
     for i_item in range(B):
         name = item['name'][i_item]
-        scale_trg = item['scale_obj'][i_item]
-        center_trg = item['center_obj'][i_item]
+        scale_trg = item['scale_obj'][i_item].to(device)
+        center_trg = item['center_obj'][i_item].to(device)
         final_verts, final_faces = new_src_mesh.get_mesh_verts_faces(i_item)
         final_verts = final_verts * scale_trg + center_trg
         final_obj = os.path.join(defomed_model+'meshes/', 'mesh_'+name.split('.')[0]+'_'+'.obj')
@@ -263,7 +278,12 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
 
 
         with torch.no_grad():
-            code_trg = network.encoder(seq_pc_trg.permute(0, 2, 1))
+            #code_trg = network.encoder(seq_pc_trg.permute(0, 2, 1))
+            if(args['encoder_type'] == '2018'):
+                code_trg , _ = network(seq_pc_trg.permute(0, 2, 1))
+            else:
+                code_trg = network.encoder(seq_pc_trg.permute(0, 2, 1))
+
             #pcd = o3d.geometry.PointCloud()
 
         

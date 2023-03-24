@@ -40,7 +40,7 @@ class Encoder(nn.Module):
     """
     Graph based encoder.
     """
-    def __init__(self):
+    def __init__(self, in_channel=1024):
         super(Encoder, self).__init__()
 
         self.conv1 = nn.Conv1d(12, 64, 1)
@@ -55,7 +55,10 @@ class Encoder(nn.Module):
         self.graph_layer2 = GraphLayer(in_channel=128, out_channel=1024, k=16)
 
         self.conv4 = nn.Conv1d(1024, 512, 1)
+        self.conv5 = nn.Conv1d(512, 256, 1)
         self.bn4 = nn.BatchNorm1d(512)
+        self.bn5 = nn.BatchNorm1d(256)
+        self.in_channel = in_channel
 
     def forward(self, x):
         b, c, n = x.size()
@@ -78,9 +81,13 @@ class Encoder(nn.Module):
         x = self.graph_layer1(x)
         x = self.graph_layer2(x)
 
-        #x = self.bn4(self.conv4(x))
+        if(self.in_channel == 256):
+            x = self.bn4(self.conv4(x))
+            x = self.bn5(self.conv5(x))
 
         x = torch.max(x, dim=-1)[0]
+
+        print('encoding shape: ', x.shape)
         return x
 
 
@@ -165,11 +172,11 @@ class Decoder(nn.Module):
 
 
 class AutoEncoder(nn.Module):
-    def __init__(self):
+    def __init__(self, k=1024):
         super().__init__()
 
-        self.encoder = Encoder()
-        self.decoder = Decoder()
+        self.encoder = Encoder(in_channel=k)
+        self.decoder = Decoder(in_channel=k)
 
     def forward(self, x):
         #print('shape of x before encoding: ', x.shape)

@@ -25,10 +25,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=16)
 parser.add_argument('--lr', type=float, default=1e-4)
 parser.add_argument('--weight_decay', type=float, default=1e-6)
-parser.add_argument('--epochs', type=int, default=1000000)
+parser.add_argument('--epochs', type=int, default=100000)
 parser.add_argument('--num_workers', type=int, default=4)
+parser.add_argument('--k', type=int, default=256)
 
-parser.add_argument('--encoder_type', type=str, default='2018')
+parser.add_argument('--encoder_type', type=str, default='folding')
 parser.add_argument('--load', action='store_true')
 parser.add_argument("-e", "--euler", action="store_true", help="checksum blocksize")
 args = parser.parse_args()
@@ -36,26 +37,24 @@ args = parser.parse_args()
 
 
 # prepare training and testing dataset
-numOfPoints = 4000
+numOfPoints = 3000
 
 
 # device
 if(args.euler):
-    defomed_model = '/hdd/eli/nvp_foldingnet_ycb_cosinusAneal_50/'
     rootData="/hdd/eli"
     train_deformed=rootData+'/ycb_mult_5_one_seq/train/'
     train_src=rootData+'/ycb_mult_5_one_seq/in'
     valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
-    path_autoencoder='/hdd/eli/first_50_each_2018_1024dim/'
+    path_autoencoder='/hdd/eli/first_50_each_folding_'+str(numOfPoints)+'_'+str(args.k)+'dim/'
     if torch.cuda.is_available():
         device = torch.device("cuda:2")
 else:
-    defomed_model = './nvp_foldingnet_ycb_cosinusAneal_50_test/'
     rootData="/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path"
     train_deformed=rootData+'/ycb_mult_5_one_seq/train/'
     train_src=rootData+'/ycb_mult_5_one_seq/in'
     valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
-    path_autoencoder='./first_50_each_2018_1024dim/'
+    path_autoencoder='./first_50_each_folding_'+str(numOfPoints)+'_'+str(args.k)+'dim/'
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
 
@@ -85,22 +84,21 @@ if(args.encoder_type == '2018'):
             init.ones_(m.weight)
             init.zeros_(m.bias)
 
-    autoencoder = Autoencoder(k=1024, num_points=numOfPoints).to(device)
+    autoencoder = Autoencoder(k=args.k, num_points=numOfPoints).to(device)
     autoencoder = autoencoder.apply(weights_init).to(device)
 elif(args.encoder_type == 'folding'):
-    autoencoder = AutoEncoder()
+    autoencoder = AutoEncoder(k=args.k)
 
 autoencoder.to(device)
 
 # loss function
 # optimizer
-#optimizer = optim.Adam(autoencoder.parameters(), lr=args.lr, betas=[0.9, 0.999], weight_decay=args.weight_decay)
-num_steps = args.epochs * (len(train_dataset) // args.batch_size)
-optimizer = optim.Adam(autoencoder.parameters(), lr=5e-4, weight_decay=1e-5)
-scheduler = CosineAnnealingLR(optimizer, T_max=num_steps, eta_min=1e-7)
+optimizer = optim.Adam(autoencoder.parameters(), lr=args.lr, betas=[0.9, 0.999], weight_decay=args.weight_decay)
+#num_steps = args.epochs * (len(train_dataset) // args.batch_size)
+#optimizer = optim.Adam(autoencoder.parameters(), lr=5e-4, weight_decay=1e-5)
+#scheduler = CosineAnnealingLR(optimizer, T_max=num_steps, eta_min=1e-7)
 #batches = int(len(train_dataset) / args.batch_size + 0.5)
 
-min_cd_loss = 1e3
 best_epoch = -1
 
 
@@ -138,7 +136,7 @@ for epoch in range(epoch_start, args.epochs + 1):
         optimizer.zero_grad()
         ls.backward()
         optimizer.step()
-        scheduler.step()
+        #scheduler.step()
         
         #q+=1
         #print('q: ', q)
