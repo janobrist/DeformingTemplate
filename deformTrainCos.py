@@ -48,7 +48,7 @@ if(args['euler']):
     valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
     valid_src=rootData+'/ycb_mult_5_one_seq/in'
     #path_autoencoder='./first_50_each_2018_1024dim/logs/model_lowest_cd_loss.pth'
-    path_autoencoder='./auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
+    path_autoencoder='/hdd/eli/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
     if torch.cuda.is_available():
         device = torch.device("cuda:3")
 else:
