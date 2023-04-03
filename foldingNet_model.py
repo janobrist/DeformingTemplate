@@ -43,6 +43,8 @@ class Encoder(nn.Module):
     def __init__(self, in_channel=1024):
         super(Encoder, self).__init__()
 
+        self.in_channel=in_channel
+
         self.conv1 = nn.Conv1d(12, 64, 1)
         self.conv2 = nn.Conv1d(64, 64, 1)
         self.conv3 = nn.Conv1d(64, 64, 1)
@@ -54,13 +56,18 @@ class Encoder(nn.Module):
         self.graph_layer1 = GraphLayer(in_channel=64, out_channel=128, k=16)
         self.graph_layer2 = GraphLayer(in_channel=128, out_channel=1024, k=16)
 
-        self.conv4 = nn.Conv1d(1024, 512, 1)
+        print('in_channel: ', self.in_channel)
+        #if(self.in_channel == 256):
+        #print('in ere')
         self.conv5 = nn.Conv1d(512, 256, 1)
-        self.bn4 = nn.BatchNorm1d(512)
         self.bn5 = nn.BatchNorm1d(256)
-        self.in_channel = in_channel
+        self.bn4 = nn.BatchNorm1d(512)
+        self.conv4 = nn.Conv1d(1024, 512, 1)
+        
+        
 
     def forward(self, x):
+        
         b, c, n = x.size()
 
         # get the covariances, reshape and concatenate with x
@@ -81,6 +88,7 @@ class Encoder(nn.Module):
         x = self.graph_layer1(x)
         x = self.graph_layer2(x)
 
+        
         if(self.in_channel == 256):
             x = self.bn4(self.conv4(x))
             x = self.bn5(self.conv5(x))

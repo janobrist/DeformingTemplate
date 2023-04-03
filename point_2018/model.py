@@ -181,9 +181,9 @@ class Autoencoder(nn.Module):
         else:
             if(instanceNor):
                 encoding=self.norm0(encoding)
-            #print('encoding shape: ', encoding.shape) # 16, 256, 1
+            print('encoding shape: ', encoding.shape) # 16, 256, 1
             x = self.decoder(encoding)  # shape [b, num_points * 3, 1]
-            #print('x shape before viewing: ', x.shape)
+            print('x shape before viewing: ', x.shape)
             restoration = x.view(b, 3, num_points)
 
-        return encoding.squeeze(2), restoration
+        return encoding, restoration

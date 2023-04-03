@@ -274,7 +274,7 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         trg_mesh = Meshes(verts=trg_mesh_verts_rightSize, faces=trg_mesh_faces_rightSize)
         src_mesh = Meshes(verts=src_mesh_verts_rightSize, faces=src_mesh_faces_rightSize)
         
-        seq_pc_trg = sample_points_from_meshes(trg_mesh, 4000).to(device)#3000
+        seq_pc_trg = sample_points_from_meshes(trg_mesh, numOfPoints).to(device)#3000
 
 
         with torch.no_grad():
@@ -321,13 +321,6 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
     print('val loss mean: ', loss_mean)
     path_check = defomed_model+'check/'+ 'check'+str(epoch)+'.pt'
     path_check_min = defomed_model+'check/'+ 'check'+'_min'+'.pt'
-    if(loss_mean < minLoss):
-        torch.save({
-            #'encoder': homeomorphism_encoder.state_dict(),
-            'decoder': homeomorphism_decoder.state_dict(),
-            'optimizer': optimizer.state_dict(),
-            'epoch':epoch,
-            }, path_check_min)
 
     #print('loss_mean: ', loss_mean)
 

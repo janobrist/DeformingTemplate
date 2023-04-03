@@ -27,7 +27,7 @@ parser.add_argument('--lr', type=float, default=1e-4)
 parser.add_argument('--weight_decay', type=float, default=1e-6)
 parser.add_argument('--epochs', type=int, default=100000)
 parser.add_argument('--num_workers', type=int, default=4)
-parser.add_argument('--k', type=int, default=256)
+parser.add_argument('--k', type=int, default=1024)
 
 parser.add_argument('--encoder_type', type=str, default='folding')
 parser.add_argument('--load', action='store_true')
@@ -54,7 +54,8 @@ else:
     train_deformed=rootData+'/ycb_mult_5_one_seq/train/'
     train_src=rootData+'/ycb_mult_5_one_seq/in'
     valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
-    path_autoencoder='./first_50_each_folding_'+str(numOfPoints)+'_'+str(args.k)+'dim/'
+    #path_autoencoder='./first_50_each_folding_'+str(numOfPoints)+'_'+str(args.k)+'dim/'
+    path_autoencoder='./first_50_each/'
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
 
@@ -110,9 +111,9 @@ if(not args.load):
     min_cd_loss = 1000000000
     iter = 0
 else:
-    dict = torch.load(args.log_dir+'/model_epoch_9000.pth')
+    dict = torch.load(args.log_dir+'/model_epoch_1000.pth')
     epoch_start = dict['epoch']
-    min_cd_loss = dict['loss']
+    min_cd_loss = 10000000 #dict['loss']
     iter = dict['epoch'] * len(test_dataset)
     autoencoder.load_state_dict(dict['model_state_dict'])
     optimizer.load_state_dict(dict['optimizer_state_dict'])
