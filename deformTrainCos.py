@@ -38,28 +38,40 @@ parser.add_argument("-l", "--load", action="store_true", help="checksum blocksiz
 parser.add_argument("-e", "--euler", action="store_true", help="checksum blocksize")
 parser.add_argument('--encoder_type', type=str, default='2018')
 args = vars(parser.parse_args())
+config='5'
 
-
+if(config=="4"):
+    auto="auto2018_1024dim_3000points_NoAug_1000seq_scissor"
+    trainName='/ycb_mult_1_thousand_seq/train/'
+    valName='/ycb_mult_1_thousand_seq/val/'
+    inName='/ycb_mult_1_thousand_seq/in'
+    deformName='nvp_2018_1024dim_ycb_1000seq_sc_cosinusAneal_20/'
+elif(config=="5"):
+    auto="auto2018_1024dim_3000points_NoAug_1seq_scissor"
+    trainName='/ycb_mult_5_one_seq/train_sc/'
+    valName='/ycb_mult_5_one_seq/val_sc/'
+    inName='/ycb_mult_5_one_seq/in'
+    deformName='nvp_2018_1024dim_ycb_1seq_sc_cosinusAneal_50/'
 if(args['euler']):
-    defomed_model = '/hdd/eli/nvp_2018_1024dim_ycb_cosinusAneal_50/'
+    defomed_model = '/hdd/eli/'+deformName
     rootData="/hdd/eli"
-    train_deformed=rootData+'/ycb_mult_5_one_seq/train/'
-    train_src=rootData+'/ycb_mult_5_one_seq/in'
-    valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
-    valid_src=rootData+'/ycb_mult_5_one_seq/in'
+    train_deformed=rootData+trainName
+    train_src=rootData+inName
+    valid_deformed=rootData+valName
+    valid_src=rootData+inName
     #path_autoencoder='./first_50_each_2018_1024dim/logs/model_lowest_cd_loss.pth'
-    path_autoencoder='/hdd/eli/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
+    path_autoencoder='/hdd/eli/'+auto+'/models/check_min.pt'
     if torch.cuda.is_available():
         device = torch.device("cuda:3")
 else:
-    defomed_model = './nvp_2018_1024dim_ycb_cosinusAneal_50/'
+    defomed_model = './'+deformName
     rootData="/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path"
-    train_deformed=rootData+'/ycb_mult_5_one_seq/train/'
-    train_src=rootData+'/ycb_mult_5_one_seq/in'
-    valid_deformed=rootData+'/ycb_mult_5_one_seq/val/'
-    valid_src=rootData+'/ycb_mult_5_one_seq/in'
+    train_deformed=rootData+trainName
+    train_src=rootData+inName
+    valid_deformed=rootData+valName
+    valid_src=rootData+inName
     #path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each_2018_1024dim/logs/model_lowest_cd_loss.pth'
-    path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
+    path_autoencoder='./'+auto+'/models/check_min.pt'
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
 

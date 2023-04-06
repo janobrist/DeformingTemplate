@@ -39,7 +39,7 @@ else:
 #dataset_path = '/home/elham/Desktop/point-cloud-autoencoder/donut/' 
 #dataset_path = '/home/elham/Desktop/point-cloud-autoencoder/car/'
 #dataset_path = '/home/elham/Desktop/point-cloud-autoencoder/car-donut/'
-dataset_path_train='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/train_sc'
+#dataset_path_train='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/train_sc'
 #dataset_path_val='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val_sc'   
 #dataset_path = '/home/elham/Desktop/point-cloud-autoencoder/latent_3d_points/data/shape_net_core_uniform_samples_2048/'
 os.makedirs(folder, exist_ok=True)

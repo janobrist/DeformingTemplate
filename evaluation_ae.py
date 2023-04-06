@@ -24,27 +24,41 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--encoder_type', type=str, default='2018')
 args = parser.parse_args()
 
-config='2'
+config='5'
 #Mean Chamfer Distance of all Point Clouds: tensor(0.0010)
 if(config == "0"):
     folder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_256dim_3000points_NoAug_1seq_5ycb/'
     args.k=256
+    val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val'
 #Mean Chamfer Distance of all Point Clouds: tensor(0.0010)
 elif(config == "1"):
     folder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/'
     args.k=1024
+    val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val'
 #Mean Chamfer Distance of all Point Clouds: tensor(0.0011)
 elif(config == "2"):
     folder='/home/elham/Desktop/FoldingNet/first_50_each_folding_3000_256dim'
     args.k=256
+    val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val'
 #Mean Chamfer Distance of all Point Clouds: tensor(0.0011)
 elif(config == "3"):
     folder='/home/elham/Desktop/FoldingNet/first_50_each_folding_3000_1024dim'
     args.k=1024
+    val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val'
+#Mean Chamfer Distance of all Point Clouds: tensor(0.0002)
+elif(config == "4"):
+    folder='/home/elham/Desktop/FoldingNet/auto2018_1024dim_3000points_NoAug_1000seq_scissor'
+    args.k=1024
+    val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_1_thousand_seq/val'
+#Mean Chamfer Distance of all Point Clouds: tensor(0.0002)
+elif(config == "5"):
+    folder='/home/elham/Desktop/FoldingNet/auto2018_1024dim_3000points_NoAug_1seq_scissor'
+    args.k=1024
+    val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val_sc'
 numOfPoints =  3000
-test_dataset = PointClouds('/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val', is_training=True, num_points=numOfPoints)
+test_dataset = PointClouds(val_folder, is_training=True, num_points=numOfPoints)
 
-if(config == "0" or config == "1"):
+if(config == "0" or config == "1" or config == "4" or config == "5"):
     args.encoder_type = "2018"
 else:
     args.encoder_type = "folding"
