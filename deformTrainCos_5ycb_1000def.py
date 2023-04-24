@@ -38,20 +38,15 @@ parser.add_argument("-l", "--load", action="store_true", help="checksum blocksiz
 parser.add_argument("-e", "--euler", action="store_true", help="checksum blocksize")
 parser.add_argument('--encoder_type', type=str, default='2018')
 args = vars(parser.parse_args())
-config='5'
+config='4'
 
 if(config=="4"):
-    auto="auto2018_1024dim_3000points_NoAug_1000seq_scissor"
+    auto="auto2018_1024dim_3000points_NoAug_1000seq_5ycb"
     trainName='/ycb_mult_1_thousand_seq/train/'
     valName='/ycb_mult_1_thousand_seq/val/'
     inName='/ycb_mult_1_thousand_seq/in'
-    deformName='nvp_2018_1024dim_ycb_1000seq_sc_cosinusAneal_20/'
-elif(config=="5"):
-    auto="auto2018_1024dim_3000points_NoAug_1seq_scissor"
-    trainName='/ycb_mult_5_one_seq/train_sc/'
-    valName='/ycb_mult_5_one_seq/val_sc/'
-    inName='/ycb_mult_5_one_seq/in'
-    deformName='nvp_2018_1024dim_ycb_1seq_sc_cosinusAneal_50/'
+    deformName='nvp_2018_1024dim_ycb_1000seq_5ycb_cosinusAneal_20/'
+
 if(args['euler']):
     defomed_model = '/hdd/eli/'+deformName
     rootData="/hdd/eli"

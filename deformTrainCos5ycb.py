@@ -20,7 +20,7 @@ from pytorch3d.loss import (
     mesh_normal_consistency,
 )
 import trimesh
-from dataset_meshes import Dataset_mesh, Dataset_mesh_objects, collate_fn
+from dataset_meshes2 import Dataset_mesh, Dataset_mesh_objects, collate_fn
 from torch.utils.data import DataLoader
 import random
 from foldingNet_model import AutoEncoder
@@ -38,20 +38,15 @@ parser.add_argument("-l", "--load", action="store_true", help="checksum blocksiz
 parser.add_argument("-e", "--euler", action="store_true", help="checksum blocksize")
 parser.add_argument('--encoder_type', type=str, default='2018')
 args = vars(parser.parse_args())
-config='5'
+config='4'
 
 if(config=="4"):
-    auto="auto2018_1024dim_3000points_NoAug_1000seq_scissor"
+    auto="auto2018_1024dim_3000points_NoAug_1000seq_5ycb"
     trainName='/ycb_mult_1_thousand_seq/train/'
     valName='/ycb_mult_1_thousand_seq/val/'
     inName='/ycb_mult_1_thousand_seq/in'
-    deformName='nvp_2018_1024dim_ycb_1000seq_sc_cosinusAneal_20/'
-elif(config=="5"):
-    auto="auto2018_1024dim_3000points_NoAug_1seq_scissor"
-    trainName='/ycb_mult_5_one_seq/train_sc/'
-    valName='/ycb_mult_5_one_seq/val_sc/'
-    inName='/ycb_mult_5_one_seq/in'
-    deformName='nvp_2018_1024dim_ycb_1seq_sc_cosinusAneal_50/'
+    deformName='nvp_2018_1024dim_ycb_1000seq_5ycb_cosinusAneal_20/'
+
 if(args['euler']):
     defomed_model = '/hdd/eli/'+deformName
     rootData="/hdd/eli"
@@ -78,10 +73,10 @@ else:
 B = 8
 #print('before')
 training_dataset = Dataset_mesh_objects(trg_root=train_deformed, src_root=train_src)
-train_dataloader = DataLoader(training_dataset, batch_size=B, shuffle=True, collate_fn=collate_fn)
+train_dataloader = DataLoader(training_dataset, batch_size=B, shuffle=True, collate_fn=lambda b, device=device: collate_fn(b, device))
 
 valid_dataset = Dataset_mesh_objects(trg_root=valid_deformed, src_root=valid_src)
-valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=True, collate_fn=collate_fn)
+valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=True, collate_fn=lambda b, device=device: collate_fn(b, device))
 #print('after')
 
 
@@ -174,7 +169,7 @@ normal_losses = []
 
 
 iteration = 0
-
+import time
 for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple times
     losses = []
     #print('epoch:', epoch)
@@ -182,21 +177,45 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
     for i, item in enumerate(train_dataloader):
 
         #print('i: ',i)
+        start = time.time()
+        orig_verts_trg, orig_faces_trg, orig_verts_src, orig_faces_src, changedItem=item
+
+        print('item reading: ', time.time()- start)
+        #print('orig_verts_trg: ', len(orig_verts_trg))
+        #print('orig_verts_trg 0: ', orig_verts_trg[0].shape)
+        #print('orig_verts_trg 1: ', orig_verts_trg[1].shape)
+        #print('orig_faces_trg: ', len(orig_faces_trg))
+        #print('orig_verts_src: ', len(orig_verts_src))
+        #print('orig_faces_src: ', len(orig_faces_src))
+        #print('see this?:',len(first[3]))
+        #print('see this?:',first[3][0].shape)
+        #print('see this?:',sec['vertices_trg'].shape)
         optimizer.zero_grad()
 
-        num_points = item['num_points']
-        num_faces = item['num_faces']
-        B,_,_ = item['vertices_src'].shape
-        trg_mesh_verts_rightSize = [item['vertices_trg'][s][:num_points[s]]for s in range(B)]
-        trg_mesh_faces_rightSize = [item['faces_trg'][s][:num_faces[s]]for s in range(B)]
 
-        src_mesh_verts_rightSize = [item['vertices_src'][s][:num_points[s]]for s in range(B)]
-        src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]]for s in range(B)]
+        num_points = changedItem['num_points']
+        #num_faces = changedItem['num_faces']
+        B,_,_ = changedItem['vertices_src'].shape
+
+        trg_mesh_verts_rightSize = orig_verts_trg #[item['vertices_trg'][s][:num_points[s]]for s in range(B)]
+
+        trg_mesh_faces_rightSize = orig_faces_trg #[item['faces_trg'][s][:num_faces[s]]for s in range(B)]
+
+
+        src_mesh_verts_rightSize = orig_verts_src #[item['vertices_src'][s][:num_points[s]]for s in range(B)]
+
+        src_mesh_faces_rightSize = orig_faces_src #[item['faces_src'][s][:num_faces[s]]for s in range(B)]
+
 
         trg_mesh = Meshes(verts=trg_mesh_verts_rightSize, faces=trg_mesh_faces_rightSize)
+
         src_mesh = Meshes(verts=src_mesh_verts_rightSize, faces=src_mesh_faces_rightSize)
+
+        print('creating meshes: ', time.time()- start)
         
         seq_pc_trg = sample_points_from_meshes(trg_mesh, numOfPoints).to(device)
+
+        print('sample points: ', time.time()- start)
         #seq_pc_src = sample_points_from_meshes(src_mesh, 4000).to(device)
 
         with torch.no_grad():
@@ -206,23 +225,29 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
             else:
                 code_trg = network.encoder(seq_pc_trg.permute(0, 2, 1))
 
-        
-        print('code_trg.shape: ', code_trg.shape)
+        print('encode: ', time.time()- start)
+        #print('code_trg.shape: ', code_trg.shape)
         b, k = code_trg.shape
 
-        query = item['vertices_src'].to(device)
+        query = changedItem['vertices_src'].to(device)
 
         #print('code trg shape: ', code_trg.shape)
         #print('query shape: ', query.shape)
+        beforeDecoder = time.time()
         coordinates = homeomorphism_decoder.forward(code_trg, query)
+        print('decode: ', time.time()- start )
         #print('coordinates shape: ', coordinates.shape)
+
         coordinates = coordinates.reshape(B, 9000, 3)
 
+        loopstart= time.time()
         new_src_mesh_verts_rightSize = [coordinates[s][:num_points[s]]for s in range(B)]
-        new_src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]].to(device) for s in range(B)]
- 
+        loopend = time.time()
+        print('loop time: ', loopend - loopstart)
+        new_src_mesh_faces_rightSize = src_mesh_faces_rightSize#.to(device) #[changedItem['faces_src'][s][:num_faces[s]].to(device) for s in range(B)]
+
         new_src_mesh = Meshes(verts=new_src_mesh_verts_rightSize, faces=new_src_mesh_faces_rightSize)
-        print('new_src_mesh device: ', new_src_mesh.device)
+        #print('new_src_mesh device: ', new_src_mesh.device)
 
         numberOfSampledPoints = 5000
         sample_trg = sample_points_from_meshes(trg_mesh, numberOfSampledPoints).to(device)
@@ -234,10 +259,16 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         print('loss: ',loss)
         losses.append(loss)
 
-
+        
+        backstart = time.time()
         loss.backward()
         optimizer.step()
         scheduler.step()
+        backend = time.time()
+        print('back time: ', backend - backstart)
+
+        end = time.time()
+        print('how long did it take: ', end-start)
 
 
         #final_verts, final_faces = new_src_mesh.get_mesh_verts_faces(0)
@@ -251,11 +282,13 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         #break
         writer.add_scalar("train/loss_iteration", loss, iteration)
         iteration+=1
+
+        #break
         
     for i_item in range(B):
-        name = item['name'][i_item]
-        scale_trg = item['scale_obj'][i_item].to(device)
-        center_trg = item['center_obj'][i_item].to(device)
+        name = changedItem['name'][i_item]
+        scale_trg = changedItem['scale_obj'][i_item].to(device)
+        center_trg = changedItem['center_obj'][i_item].to(device)
         final_verts, final_faces = new_src_mesh.get_mesh_verts_faces(i_item)
         final_verts = final_verts * scale_trg + center_trg
         final_obj = os.path.join(defomed_model+'meshes/', 'mesh_'+name.split('.')[0]+'_'+'.obj')
@@ -264,7 +297,7 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
 
     loss_mean = sum(losses) / len(losses)
     #print('loss_mean: ', loss_mean)
-
+    
     
 
     writer.add_scalar("train/lr", lr, epoch)
@@ -274,14 +307,15 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
     homeomorphism_decoder.eval()
     for i, item in enumerate(valid_dataloader):
 
-        num_points = item['num_points']
-        num_faces = item['num_faces']
-        B,_,_ = item['vertices_src'].shape
-        trg_mesh_verts_rightSize = [item['vertices_trg'][s][:num_points[s]]for s in range(B)]
-        trg_mesh_faces_rightSize = [item['faces_trg'][s][:num_faces[s]]for s in range(B)]
+        orig_verts_trg, orig_faces_trg, orig_verts_src, orig_faces_src, changedItem=item
+        num_points = changedItem['num_points']
+        #num_faces = changedItem['num_faces']
+        B,_,_ = changedItem['vertices_src'].shape
+        trg_mesh_verts_rightSize = orig_verts_trg #[item['vertices_trg'][s][:num_points[s]]for s in range(B)]
+        trg_mesh_faces_rightSize = orig_faces_trg #[item['faces_trg'][s][:num_faces[s]]for s in range(B)]
 
-        src_mesh_verts_rightSize = [item['vertices_src'][s][:num_points[s]]for s in range(B)]
-        src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]]for s in range(B)]
+        src_mesh_verts_rightSize = orig_verts_src #[item['vertices_src'][s][:num_points[s]]for s in range(B)]
+        src_mesh_faces_rightSize = orig_faces_src #[item['faces_src'][s][:num_faces[s]]for s in range(B)]
 
         trg_mesh = Meshes(verts=trg_mesh_verts_rightSize, faces=trg_mesh_faces_rightSize)
         src_mesh = Meshes(verts=src_mesh_verts_rightSize, faces=src_mesh_faces_rightSize)
@@ -303,16 +337,16 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         b, k = code_trg.shape
 
         #print('N.shape: ', N)
-        query = item['vertices_src'].to(device)#torch.cat(B*[src_mesh.verts_packed().unsqueeze(0)], axis=0)
+        query = changedItem['vertices_src'].to(device)#torch.cat(B*[src_mesh.verts_packed().unsqueeze(0)], axis=0)
 
         with torch.no_grad():
             coordinates = homeomorphism_decoder.forward(code_trg, query)
         coordinates = coordinates.reshape(B, 9000, 3)
 
         new_src_mesh_verts_rightSize = [coordinates[s][:num_points[s]]for s in range(B)]
-        new_src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]].to(device) for s in range(B)]
+        #new_src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]].to(device) for s in range(B)]
 
-        new_src_mesh = Meshes(verts=new_src_mesh_verts_rightSize, faces=new_src_mesh_faces_rightSize)
+        new_src_mesh = Meshes(verts=new_src_mesh_verts_rightSize, faces=src_mesh_faces_rightSize)
 
         numberOfSampledPoints = 5000
         sample_trg = sample_points_from_meshes(trg_mesh, numberOfSampledPoints).to(device)#5000

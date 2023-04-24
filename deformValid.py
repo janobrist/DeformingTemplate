@@ -32,15 +32,13 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
 #deformed_model = './nvp_2018_1024dim_ycb_cosinusAneal_50/'
-config='3'
+config='6'
 
 B = 4
 #path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
 
 #path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each/logs/model_epoch_9000.pth'
-device='cuda:0'
-valid_dataset = Dataset_mesh_objects(trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/', src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in')
-valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=False, collate_fn=collate_fn)
+
 #print('after')
 #print('path:' ,path)
 
@@ -56,35 +54,63 @@ args = vars(parser.parse_args())
 if(config == "0"):
     deformed_model = '/home/elham/Desktop/tutorials/fitMesh/cadex_nvp_pointnetEncoder2018paper_3000points_256Dim_noAug_minEncoder_ycb_5_1seq/'
     path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_256dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
+    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/'
+    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
     args["k"]=256
     coeff = 2
 #loss_mean:  tensor(0.0010, device='cuda:0')
 elif(config == "1"):
     deformed_model = '/home/elham/Desktop/FoldingNet/nvp_2018_1024dim_ycb_cosinusAneal_50/'
     path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
+    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/'
+    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
     args["k"]=1024
     coeff = 8
 #loss_mean:  tensor(0.0014, device='cuda:0')
 elif(config == "2"):
     deformed_model = '/home/elham/Desktop/FoldingNet/nvp_folding_256dim_ycb_cosinusAneal_50/'
     path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each_folding_3000_256dim/logs/model_lowest_cd_loss.pth'
+    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/'
+    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
     args["k"]=256
     coeff = 2
 #loss_mean:  tensor(0.0015, device='cuda:0')
 elif(config == "3"):
     deformed_model = '/home/elham/Desktop/FoldingNet/nvp_folding_1024dim_ycb_cosinusAneal_50/'
     path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each_folding_3000_1024dim/logs/model_lowest_cd_loss.pth'
+    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/'
+    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
     args["k"]=1024
     coeff = 8
 #loss_mean:  tensor(0.0014, device='cuda:0')
 elif(config == "4"):
     deformed_model = '/home/elham/Desktop/FoldingNet/nvp_folding_1024dim_ycb_cosinusAneal_50End2End/'
+    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/'
+    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
     #path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each_folding_3000_1024dim/logs/model_lowest_cd_loss.pth'
     args["k"]=1024
     coeff = 8
 #loss_mean:  tensor(0.0010, device='cuda:0')
 elif(config == "5"):
     deformed_model = '/home/elham/Desktop/FoldingNet/nvp_2018_1024dim_ycb_cosinusAneal_50End/'
+    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/'
+    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
+    #path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
+    args["k"]=1024
+    coeff = 8
+#loss_mean:  tensor(0.0002, device='cuda:0')
+elif(config == "6"):
+    deformed_model = '/home/elham/Desktop/FoldingNet/nvp_2018_1024dim_ycb_1seq_sc_cosinusAneal_50_End2End/'
+    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val_sc/'
+    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
+    #path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each_folding_3000_1024dim/logs/model_lowest_cd_loss.pth'
+    args["k"]=1024
+    coeff = 8
+#loss_mean:  tensor(0.0005, device='cuda:0')
+elif(config == "7"):
+    deformed_model = '/home/elham/Desktop/FoldingNet/nvp_2018_1024dim_ycb_1000seq_sc_cosinusAneal_20_End2End/'
+    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_1_thousand_seq/val/'
+    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_1_thousand_seq/in'
     #path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
     args["k"]=1024
     coeff = 8
@@ -94,7 +120,12 @@ os.makedirs(deformed_model + 'meshes_valid', exist_ok=True)
 os.makedirs(deformed_model + 'meshes_trg_val', exist_ok=True)
 os.makedirs(deformed_model + 'meshes_compare_deform_decode', exist_ok=True)
 
-if(config == "0" or config == "1" or config == "5"):
+
+device='cuda:0'
+valid_dataset = Dataset_mesh_objects(trg_root=trg_root, src_root=src_root)
+valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=False, collate_fn=collate_fn)
+
+if(config == "0" or config == "1" or config == "5" or config == "6" or config == "7"):
     args['encoder_type'] = "2018"
 else:
     args['encoder_type'] = "folding"
@@ -293,7 +324,10 @@ for i, item in enumerate(valid_dataloader):
         save_obj(final_obj_trg, final_verts_trg, final_faces_trg)
 
 for key in keys:
-    print('loss for key: ', key, sum(lossIndividus[key])/len(losses))
+    if(len(lossIndividus[key])==0):
+        print('does not exist')
+    else:    
+        print('loss for key: ', key, sum(lossIndividus[key])/len(lossIndividus[key]))
 
 print('len: ', len(losses))
 loss_mean = sum(losses) / len(losses)
