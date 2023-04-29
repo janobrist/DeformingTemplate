@@ -32,7 +32,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
 #deformed_model = './nvp_2018_1024dim_ycb_cosinusAneal_50/'
-config='6'
+config='7'
 
 B = 4
 #path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'

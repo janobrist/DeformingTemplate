@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--encoder_type', type=str, default='2018')
 args = parser.parse_args()
 
-config='5'
+config='6'
 #Mean Chamfer Distance of all Point Clouds: tensor(0.0010)
 if(config == "0"):
     folder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_256dim_3000points_NoAug_1seq_5ycb/'
@@ -55,10 +55,15 @@ elif(config == "5"):
     folder='/home/elham/Desktop/FoldingNet/auto2018_1024dim_3000points_NoAug_1seq_scissor'
     args.k=1024
     val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val_sc'
+elif(config == "6"):
+    folder='/home/elham/Desktop/FoldingNet/auto2018_1024dim_3000points_NoAug_1000seq_5ycb'
+    args.k=1024
+    #val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_1_thousand_seq/val'
+    val_folder='/home/elham/hdd/data/ycb/ycb_mult_5_thousand_seq/val'
 numOfPoints =  3000
 test_dataset = PointClouds(val_folder, is_training=True, num_points=numOfPoints)
 
-if(config == "0" or config == "1" or config == "4" or config == "5"):
+if(config == "0" or config == "1" or config == "4" or config == "5" or config == "6"):
     args.encoder_type = "2018"
 else:
     args.encoder_type = "folding"
@@ -139,7 +144,8 @@ with torch.no_grad():
         for i in range(b):
             x_restored_ = (recons[i,...].permute(1,0) * scale[i].to('cuda')+ mean[i].to('cuda'))
             pcd.points = o3d.utility.Vector3dVector(np.float32(x_restored_.cpu().numpy()))#.float32)
-            o3d.io.write_point_cloud(folder+'/plies/fold_'+p[i]+'.ply', pcd)
+            print('folder name: ', folder+'/plies/decoded_'+p[i]+'.ply')
+            o3d.io.write_point_cloud(folder+'/plies/decoded_'+p[i]+'.ply', pcd)
             ls = chamfer_distance(point_clouds.permute(0, 2, 1), recons.permute(0, 2, 1))
             allLosses.append(ls[0].cpu())
             print(ls[0].cpu())
