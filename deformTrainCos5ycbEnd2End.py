@@ -48,7 +48,7 @@ if(config=="4"):
     deformName='nvp_2018_1024dim_ycb_1000seq_5ycb_cosinusAneal_20/'
 
 if(args['euler']):
-    defomed_model = '/hdd/eli/'+deformName
+    defomed_model = '/hdd/eli/data/ycb'+deformName
     rootData="/hdd/eli"
     train_deformed=rootData+trainName
     train_src=rootData+inName
