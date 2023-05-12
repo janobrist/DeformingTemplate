@@ -72,7 +72,7 @@ class NMF_Encoder(nn.Module):
         return ms
     
 
-class Autoencoder(nn.Module):
+class AutoencoderTemplate(nn.Module):
 
     def __init__(self, k, num_points):
         """
@@ -80,7 +80,7 @@ class Autoencoder(nn.Module):
             k: an integer, dimension of the representation vector.
             num_points: an integer.
         """
-        super(Autoencoder, self).__init__()
+        super(AutoencoderTemplate, self).__init__()
 
         # ENCODER
 
@@ -107,13 +107,13 @@ class Autoencoder(nn.Module):
         # DECODER
         #self.norm0 = InstanceNorm(k)
         self.decoder = nn.Sequential(
-            nn.Conv1d(k, 256, kernel_size=1, bias=False),
+            nn.Conv1d(k+3, 256, kernel_size=1, bias=False),
             nn.BatchNorm1d(256),
             nn.ReLU(inplace=True),
             nn.Conv1d(256, 256, kernel_size=1, bias=False),
             nn.BatchNorm1d(256),
             nn.ReLU(inplace=True),
-            nn.Conv1d(256, num_points * 3, kernel_size=1)
+            nn.Conv1d(256, 3, kernel_size=1)
         )
 
 
@@ -161,10 +161,11 @@ class Autoencoder(nn.Module):
             encoding = encoding.reshape(b,k,1)
         elif(encode == 'auto' ):
             b, _, num_points = x.size()
-            x = self.pointwise_layers(x)  # shape [b, k, num_points]
+            x_ = self.pointwise_layers(x)  # shape [b, k, num_points]
             #print('in encoding , after pointwise layers: ', x.shape)
-            encoding = self.pooling(x)  # shape [b, k, 1]
+            encoding = self.pooling(x_)  # shape [b, k, 1]
             #print('in encoding, after pooling: ', encoding.shape)
+            x = x.permute( (0, 2, 1))
         elif(encode == 'nmf'):
             x = x.permute( (0, 2, 1))
             encoding=self.encoder_nmf(x)
@@ -183,10 +184,25 @@ class Autoencoder(nn.Module):
         else:
             if(instanceNor):
                 encoding=self.norm0(encoding)
-            #print('encoding shape: ', encoding.shape) # 16, 256, 1
-            x = self.decoder(encoding)  # shape [b, num_points * 3, 1]
-            #print('shape after decoding x.shape: ', x.shape)
-            #print('x shape before viewing: ', x.shape)
+
+            #print('encoding shape: ', encoding.shape)
+            encoding_ch = encoding.squeeze(2).unsqueeze(1)
+            #print('x shape: ', x.shape)
+            encoding_rep = encoding_ch.repeat(1,x.shape[1],1)
+            #print('encoding repeated shape: ', encoding_rep.shape)
+            #print('shape of x: ', x.shape)
+            xz = torch.cat([x, encoding_rep],dim=2).permute(0, 2,1)
+            #print('xz shape: ', xz.shape)
+            #x = self.decoder(encoding)
+            x = self.decoder(xz)
+            #print('x shape: ', x.shape)
+            #x = self.decoder(encoding)  # shape [b, num_points * 3, 1]
             restoration = x.view(b, 3, num_points)
 
-        return encoding.squeeze(2), restoration
+            #print('encoding shape: ', encoding.shape) # 16, 256, 1
+            #x = self.decoder(encoding)  # shape [b, num_points * 3, 1]
+            #print('shape after decoding x.shape: ', x.shape)
+            #print('x shape before viewing: ', x.shape)
+            #restoration = x.view(b, 3, num_points)
+
+        return encoding, restoration

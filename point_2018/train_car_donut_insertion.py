@@ -2,15 +2,15 @@ import torch
 import json
 from torch.utils.data import DataLoader
 from input_pipeline import PointClouds
-from trainer import Trainer
+from trainerTemplate import TrainerTemplate
 import trimesh as trimesh
+import trimesh
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 import os
-import trimesh
-
 import argparse
 parser = argparse.ArgumentParser()
+import trimesh
 
 NUM_EPOCHS = 1000000
 BATCH_SIZE = 16
@@ -25,24 +25,22 @@ args = parser.parse_args()
 
 if(args.euler):
     if torch.cuda.is_available():
-        DEVICE = torch.device("cuda:3")
-    dataset_path_train='/hdd/eli/ycb_mult_5_one_seq/train_sc'
-    #dataset_path_val='/hdd/eli/ycb_mult_1_thousand_seq/val' 
-    folder='/hdd/eli/auto2018_1024dim_3000points_NoAug_1seq_scissor'
+        DEVICE = torch.device("cuda:2")
+    dataset_path_train='/hdd/eli/data/ycb/car_donut_data/train'
+    dataset_path_val='/hdd/eli/data/car_donut_data/train' 
+    folder='/hdd/eli/auto2018_1024dim_3000points_NoAug_car-donuts'
 else:
-    dataset_path_train='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/train_sc'
-    #dataset_path_val='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_1_thousand_seq/val'
-    folder='../auto2018_1024dim_3000points_NoAug_1seq_scissor' 
+    dataset_path_train='/home/elham/hdd/data/car_donut_data/train'
+    dataset_path_val='/home/elham/hdd/data/car_donut_data/train'
+    folder='../auto2018_1024dim_3000points_NoAug_insertion_car-donuts' 
     if torch.cuda.is_available():
         DEVICE = torch.device("cuda:0")
 
-
-#dataset_path = '/home/elham/Desktop/point-cloud-autoencoder/donut/' 
-#dataset_path = '/home/elham/Desktop/point-cloud-autoencoder/car/'
-#dataset_path = '/home/elham/Desktop/point-cloud-autoencoder/car-donut/'
-#dataset_path_train='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/train_sc'
-#dataset_path_val='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val_sc'   
+print('dataset_path_train: ', dataset_path_train)
 #dataset_path = '/home/elham/Desktop/point-cloud-autoencoder/latent_3d_points/data/shape_net_core_uniform_samples_2048/'
+#TRAIN_LOGS = 'models/run00.json'
+
+
 os.makedirs(folder, exist_ok=True)
 os.makedirs(folder+'/models', exist_ok=True)
 os.makedirs(folder+'/plies', exist_ok=True)
@@ -51,28 +49,20 @@ PATHCheck = folder+'/models/check'
 PATHCheckMin = folder+'/models/check_min'
 writer = SummaryWriter(log_dir=folder+'/events/')
 def train_and_evaluate():
-    
     train = PointClouds(dataset_path_train, labels, is_training=True)
+    val = PointClouds(dataset_path_val, labels, is_training=True)
     #val = PointClouds(dataset_path, labels, is_training=False)
 
     train_loader = DataLoader(
         dataset=train, batch_size=BATCH_SIZE, shuffle=True,
         num_workers=4)
-    # for x in train_loader:
-    #     print(x.shape)
-    #     pt = x[0,...].permute(1, 0)
-    #     print('pt.shape: ', pt.shape)
-    #     color = np.ones_like(pt)
-    #     cloud = trimesh.PointCloud(vertices=pt, colors=color)
-    #     cloud.show(background=[0,0,0,0])
-    # val_loader = DataLoader(
-    #     dataset=val, batch_size=1, shuffle=False,
-    #     num_workers=1, pin_memory=True
-    # )
+    valid_loader = DataLoader(
+        dataset=val, batch_size=BATCH_SIZE, shuffle=True,
+        num_workers=4)
 
     num_steps = NUM_EPOCHS * (len(train) // BATCH_SIZE)
     print('num_steps: ', num_steps)
-    model = Trainer(num_steps, DEVICE, folder)
+    model = TrainerTemplate(num_steps, DEVICE, folder)
     # model.network.to(DEVICE)
 
     i = 0
@@ -93,20 +83,12 @@ def train_and_evaluate():
 
     minLoss = 10000000
     for e in range(e_start, NUM_EPOCHS):
-        eval_losses = []
-        model.network.eval()
-        for batch, p, mean, scale in train_loader:
 
-            x = batch.to(DEVICE)
-            loss = model.evaluate(x, e, p, mean, scale)
-            eval_losses.append(loss)
-            print('eval_losses: ', eval_losses)
-        losses=[]
-        print('e: ', e)
         model.network.train()
         #model.network.train()
+        losses=[]
         for x, p, mean, scale in train_loader:
-            import trimesh
+            
             #print('p: ', p)
             #print('x: ', x)
             #print('x shape: ', x.shape)
@@ -135,7 +117,18 @@ def train_and_evaluate():
         writer.add_scalar("loss/train",  np.mean(losses), e)
         writer.add_scalar("lr/train", lr, e)
         print('losss: ', np.mean(losses))
-        
+
+        eval_losses = []
+        model.network.eval()
+        for batch, p, mean, scale in valid_loader:
+
+            x = batch.to(DEVICE)
+            loss = model.evaluate(x, e, p, mean, scale)
+            eval_losses.append(loss)
+            print('eval_losses: ', eval_losses)
+
+        writer.add_scalar("loss/val",  np.mean(eval_losses), e)
+
         
         if(e% 100 == 0):
             torch.save({
@@ -147,7 +140,7 @@ def train_and_evaluate():
             'epoch':e,
             }, PATHCheck+str(e)+'.pt')
         #print(model.network.state_dict())
-        if(minLoss > np.mean(losses)):
+        if(minLoss > np.mean(eval_losses)):
             minLoss = np.mean(losses)
             torch.save({
             #'encoder': homeomorphism_encoder.state_dict(),

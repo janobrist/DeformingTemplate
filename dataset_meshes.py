@@ -128,8 +128,8 @@ class Dataset_mesh_objects(Dataset):
         #print('###############scale_obj: ', scale_obj)
         verts_src_obj = verts_src_obj/scale_src_obj
 
-
-        return {'vertices_src': verts_src_obj, 'faces_src': faces_src_idx_obj, 'vertices_trg': verts_trg_obj, 'faces_trg': faces_trg_idx_obj, 'name': self.paths[idx], 'center_obj': center_trg_obj, 'scale_obj':scale_trg_obj, 'num_points':num_trg_points, 'num_faces':num_trg_faces}
+        #print('heeeeeeeeeeeeeeeerrrrrrrrrrrrreeeeeeeeeee')
+        return {'vertices_src': verts_src_obj, 'faces_src': faces_src_idx_obj, 'vertices_trg': verts_trg_obj, 'faces_trg': faces_trg_idx_obj, 'name': self.paths[idx], 'center_obj': center_trg_obj, 'scale_obj':scale_trg_obj, 'num_points':num_trg_points, 'num_faces':num_trg_faces, 'scale_src':scale_src_obj, 'center_src':center_src_obj}
 
 def collate_fn(data):
     """
@@ -188,10 +188,12 @@ def collate_fn(data):
     name = [el['name'] for el in data]
     centers = torch.cat([el['center_obj'].unsqueeze(0) for el in data], dim=0)
     scale_obj = [el['scale_obj'] for el in data]
+    centers_src = torch.cat([el['center_src'].unsqueeze(0) for el in data], dim=0)
+    scale_src = [el['scale_src'] for el in data]
     num_points = [el['num_points'] for el in data]
     num_faces = [el['num_faces'] for el in data]
     
     
 
-    return {'vertices_trg': verts_trg, 'faces_trg': faces_trg, 'vertices_src': verts_src, 'faces_src': faces_src, 'name': name, 'center_obj':centers, 'scale_obj':scale_obj, 'num_points':num_points, 'num_faces':num_faces}
+    return {'vertices_trg': verts_trg, 'faces_trg': faces_trg, 'vertices_src': verts_src, 'faces_src': faces_src, 'name': name, 'center_obj':centers, 'scale_obj':scale_obj, 'num_points':num_points, 'num_faces':num_faces, 'center_src':centers_src, 'scale_src':scale_src}
 

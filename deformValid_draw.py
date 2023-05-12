@@ -32,7 +32,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
 #deformed_model = './nvp_2018_1024dim_ycb_cosinusAneal_50/'
-config='5'
+config='7'
 
 B = 4
 #path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
@@ -114,15 +114,6 @@ elif(config == "7"):
     #path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
     args["k"]=1024
     coeff = 8
-elif(config == "8"):
-    deformed_model = '/home/elham/Desktop/FoldingNet/nvp_2018_1024dim_ycb_1000seq_5ycb_cosinusAneal_20End/'
-    trg_root='/home/elham/hdd/data/ycb/ycb_mult_5_thousand_seq/val/'
-    src_root='/home/elham/hdd/data/ycb/ycb_mult_5_thousand_seq/in/'
-    #path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
-    args["k"]=1024
-    coeff = 8
-    from dataset_meshes1000 import Dataset_mesh, Dataset_mesh_objects, collate_fn
-    
 path_load_check_decoder = deformed_model+'check/'+ 'check_min'+'.pt'
 os.makedirs(deformed_model+ 'check', exist_ok=True)
 os.makedirs(deformed_model + 'meshes_valid', exist_ok=True)
@@ -132,12 +123,9 @@ os.makedirs(deformed_model + 'meshes_compare_deform_decode', exist_ok=True)
 
 device='cuda:0'
 valid_dataset = Dataset_mesh_objects(trg_root=trg_root, src_root=src_root)
-if(config=="8"):
-    valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=True, collate_fn=lambda b, device=device: collate_fn(b, device), drop_last=True)
-else:
-    valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=False, collate_fn=collate_fn)
+valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=False, collate_fn=collate_fn)
 
-if(config == "0" or config == "1" or config == "5" or config == "6" or config == "7" or config == "8"):
+if(config == "0" or config == "1" or config == "5" or config == "6" or config == "7"):
     args['encoder_type'] = "2018"
 else:
     args['encoder_type'] = "folding"
@@ -208,7 +196,6 @@ if(args['load']):
     homeomorphism_decoder.load_state_dict(checkpoint['decoder'])
     #optimizer.load_state_dict(checkpoint['optimizer'])
     if('End' in deformed_model):
-        print('in end')
         if(args['encoder_type'] == '2018'):
             network.load_state_dict(checkpoint['network'])
         else:
@@ -235,47 +222,27 @@ normal_losses = []
 
 
 iteration = 0
-done = False
+
 
 losses = []
 lossIndividus = {}
 keys = {'scissor', 'bleach', 'hammer', 'orange', 'brick', 'dice'}
-
-radii = {'scissors':None, 'bleach':None, 'hammer':None, 'orange':None, 'foam':None, 'dice':None}
-radiiEx = {'scissors':True, 'bleach':True, 'hammer':True, 'orange':True, 'foam':True, 'dice':True}
 for key in keys:
     lossIndividus[key]=[]
 #print('epoch:', epoch)
 homeomorphism_decoder.eval()
-network.eval()
 import time
 for i, item in enumerate(valid_dataloader):
     begin= time.time()
-    if(config=="8"):
-        orig_verts_trg, orig_faces_trg, orig_verts_src, orig_faces_src, changedItem=item
-        num_points = changedItem['num_points']
-        #num_faces = changedItem['num_faces']
-        B,_,_ = changedItem['vertices_src'].shape
 
-        trg_mesh_verts_rightSize = orig_verts_trg #[item['vertices_trg'][s][:num_points[s]]for s in range(B)]
+    num_points = item['num_points']
+    num_faces = item['num_faces']
+    B,_,_ = item['vertices_src'].shape
+    trg_mesh_verts_rightSize = [item['vertices_trg'][s][:num_points[s]]for s in range(B)]
+    trg_mesh_faces_rightSize = [item['faces_trg'][s][:num_faces[s]]for s in range(B)]
 
-        trg_mesh_faces_rightSize = orig_faces_trg #[item['faces_trg'][s][:num_faces[s]]for s in range(B)]
-
-
-        src_mesh_verts_rightSize = orig_verts_src #[item['vertices_src'][s][:num_points[s]]for s in range(B)]
-
-        src_mesh_faces_rightSize = orig_faces_src #[item['faces_src'][s][:num_faces[s]]for s in range(B)]
-    else:
-        num_points = item['num_points']
-        num_faces = item['num_faces']
-        B,_,_ = item['vertices_src'].shape
-        trg_mesh_verts_rightSize = [item['vertices_trg'][s][:num_points[s]]for s in range(B)]
-        trg_mesh_faces_rightSize = [item['faces_trg'][s][:num_faces[s]]for s in range(B)]
-
-        src_mesh_verts_rightSize = [item['vertices_src'][s][:num_points[s]]for s in range(B)]
-        src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]]for s in range(B)]
-
-
+    src_mesh_verts_rightSize = [item['vertices_src'][s][:num_points[s]]for s in range(B)]
+    src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]]for s in range(B)]
 
     trg_mesh = Meshes(verts=trg_mesh_verts_rightSize, faces=trg_mesh_faces_rightSize)
     src_mesh = Meshes(verts=src_mesh_verts_rightSize, faces=src_mesh_faces_rightSize)
@@ -295,12 +262,9 @@ for i, item in enumerate(valid_dataloader):
     print('time coding: ', endCode-begCode)
     
     #print('code_trg.shape: ', code_trg.shape)
-
     b, k = code_trg.shape
-    if(config=="8"):
-        query = changedItem['vertices_src'].to('cuda')
-    else:
-        query = item['vertices_src'].to('cuda')
+
+    query = item['vertices_src'].to('cuda')
 
     #print('code trg shape: ', code_trg.shape)
     #print('query shape: ', query.shape)
@@ -313,10 +277,7 @@ for i, item in enumerate(valid_dataloader):
     coordinates = coordinates.reshape(B, 9000, 3)
 
     new_src_mesh_verts_rightSize = [coordinates[s][:num_points[s]]for s in range(B)]
-    if(config == "8"):
-        new_src_mesh_faces_rightSize = src_mesh_faces_rightSize.to('cuda')
-    else:
-        new_src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]].to('cuda') for s in range(B)]
+    new_src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]].to('cuda') for s in range(B)]
 
     new_src_mesh = Meshes(verts=new_src_mesh_verts_rightSize, faces=new_src_mesh_faces_rightSize)
     end = time.time()
@@ -344,93 +305,23 @@ for i, item in enumerate(valid_dataloader):
     #final_verts, final_faces = new_src_mesh.get_mesh_verts_faces(0)
     loss
     for i_item in range(B):
-        if(config=="8"):
-            item=changedItem
-        #else:
         name = item['name'][i_item]
         for key in keys:
             if(key in name):
                 ls = chamfer_distance(sample_trg[i_item].unsqueeze(0), new_sample_src[i_item].unsqueeze(0))
                 #print(key, ' ', lossIndividus)
                 lossIndividus[key].append(ls[0].cpu())
-        # scale_trg = item['scale_obj'][i_item].to(device)
-        # center_trg = item['center_obj'][i_item].to(device)
-        # final_verts, final_faces = new_src_mesh.get_mesh_verts_faces(i_item)
-        # final_verts = final_verts * scale_trg + center_trg
-        # final_obj = os.path.join(deformed_model+'meshes_valid/', 'mesh_'+name.split('.')[0]+'_'+'.off')
-        # save_obj(final_obj, final_verts, final_faces)
-
-        # trg_mesh_draw = trimesh.Trimesh(vertices=final_verts.cpu().numpy(), faces=final_faces.cpu().numpy())
-        # trg_mesh_draw.visual.vertex_colors = [0, 255, 0, 50]
-        # radii = np.linalg.norm(trg_mesh_draw.vertices - trg_mesh_draw.center_mass, axis=1)
-        # trg_mesh_draw.visual.vertex_colors = trimesh.visual.interpolate(radii, color_map='viridis')
-        # trg_mesh_draw.export("./temp_obj.obj", include_normals=False, include_color=True)
-
-        # final_verts_trg, final_faces_trg = trg_mesh.to(device).get_mesh_verts_faces(i_item)
-        # final_verts_trg = final_verts_trg * scale_trg + center_trg
-        # final_obj_trg = os.path.join(deformed_model+'meshes_trg_val/', 'trg_mesh_'+name.split('.')[0]+'_'+'.off')
-        # save_obj(final_obj_trg, final_verts_trg, final_faces_trg)
-        
-
-        print(item.keys())
         scale_trg = item['scale_obj'][i_item].to(device)
         center_trg = item['center_obj'][i_item].to(device)
-        scale_src = item['scale_src'][i_item].to(device)
-        center_src = item['center_src'][i_item].to(device)
         final_verts, final_faces = new_src_mesh.get_mesh_verts_faces(i_item)
         final_verts = final_verts * scale_trg + center_trg
         final_obj = os.path.join(deformed_model+'meshes_valid/', 'mesh_'+name.split('.')[0]+'_'+'.obj')
-        #save_obj(final_obj, final_verts, final_faces)
+        save_obj(final_obj, final_verts, final_faces)
 
         final_verts_trg, final_faces_trg = trg_mesh.to(device).get_mesh_verts_faces(i_item)
         final_verts_trg = final_verts_trg * scale_trg + center_trg
         final_obj_trg = os.path.join(deformed_model+'meshes_trg_val/', 'trg_mesh_'+name.split('.')[0]+'_'+'.obj')
-
-        final_verts_src, final_faces_src = src_mesh.to(device).get_mesh_verts_faces(i_item)
-        final_verts_src = final_verts_src * scale_trg + center_trg
-        final_obj_src = os.path.join(deformed_model+'meshes_src_val/', 'src_mesh_'+name.split('_')[0]+'_'+'.obj')
-        #save_obj(final_obj_trg, final_verts_trg, final_faces_trg)
-
-
-
-
-        deformed_mesh_draw = trimesh.Trimesh(vertices=final_verts.cpu().numpy(), faces=final_faces.cpu().numpy())
-        src_mesh_draw = trimesh.Trimesh(vertices=final_verts_src.cpu().numpy(), faces=final_faces_src.cpu().numpy())
-        print('name: ', name)
-        print(radii[name.split('_')[0]], name.split('_')[0])
-        #if(radiiEx[name.split('_')[0]]):
-        print('#################################### name: ', name.split('_')[0])
-        colors = np.linalg.norm(src_mesh_draw.vertices - src_mesh_draw.center_mass, axis=1)
-        radii[name.split('_')[0]]= trimesh.visual.interpolate(colors, color_map='jet')
-        print(radii[name.split('_')[0]])
-        radiiEx[name.split('_')[0]]=False
-            
-            #done=True
-
-        #deformed_mesh_draw.visual.vertex_colors = [0, 255, 0, 50]
-        trg_mesh_draw = trimesh.Trimesh(vertices=final_verts_trg.cpu().numpy(), faces=final_faces_trg.cpu().numpy())
-        trg_mesh_draw.visual.vertex_colors = radii[name.split('_')[0]] #trimesh.visual.interpolate(radii[name.split('_')[0]], color_map='viridis')
-        trg_mesh_draw.export(final_obj_trg, include_color=True)
-
-        ###########################################################################################3
-        
-        src_mesh_draw.visual.vertex_colors = radii[name.split('_')[0]] #trimesh.visual.interpolate(radii[name.split('_')[0]], color_map='viridis')
-        src_mesh_draw.export(final_obj_src, include_color=True)
-
-        #########################################################################################################################3
-        
-        print('mass: ', deformed_mesh_draw.center_mass)
-        deformed_mesh_draw.visual.vertex_colors = radii[name.split('_')[0]] #trimesh.visual.interpolate(radii[name.split('_')[0]], color_map='viridis')
-        deformed_mesh_draw.export(final_obj,include_color=True)
-
-        
-        #trg_mesh_draw.visual.vertex_colors = [0, 255, 0, 50]
-        #radii = np.linalg.norm(trg_mesh_draw.vertices - trg_mesh_draw.center_mass, axis=1)
-
-        
-            
-
-
+        save_obj(final_obj_trg, final_verts_trg, final_faces_trg)
 
 for key in keys:
     if(len(lossIndividus[key])==0):
