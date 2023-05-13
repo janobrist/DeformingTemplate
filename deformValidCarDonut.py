@@ -32,7 +32,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
 #deformed_model = './nvp_2018_1024dim_ycb_cosinusAneal_50/'
-config='5'
+config='0'
 
 B = 128
 #path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
@@ -50,85 +50,14 @@ parser.add_argument('--encoder_type', type=str, default='folding')
 
 args = vars(parser.parse_args())
 
-#loss_mean:  tensor(0.0011, device='cuda:0')
+
 if(config == "0"):
-    deformed_model = '/home/elham/Desktop/tutorials/fitMesh/cadex_nvp_pointnetEncoder2018paper_3000points_256Dim_noAug_minEncoder_ycb_5_1seq/'
-    path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_256dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
-    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/'
-    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
-    args["k"]=256
-    coeff = 2
-#loss_mean:  tensor(0.0012, device='cuda:0')
-elif(config == "1"):
-    deformed_model = '/home/elham/Desktop/FoldingNet/nvp_2018_1024dim_ycb_cosinusAneal_50/'
-    path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
-    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/'
-    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
-    args["k"]=1024
-    coeff = 8
-#loss_mean:  tensor(0.0016, device='cuda:0')
-elif(config == "2"):
-    deformed_model = '/home/elham/Desktop/FoldingNet/nvp_folding_256dim_ycb_cosinusAneal_50/'
-    path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each_folding_3000_256dim/logs/model_lowest_cd_loss.pth'
-    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/'
-    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
-    args["k"]=256
-    coeff = 2
-#loss_mean:  tensor(0.0017, device='cuda:0')
-elif(config == "3"):
-    deformed_model = '/home/elham/Desktop/FoldingNet/nvp_folding_1024dim_ycb_cosinusAneal_50/'
-    path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each_folding_3000_1024dim/logs/model_lowest_cd_loss.pth'
-    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/'
-    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
-    args["k"]=1024
-    coeff = 8
-#loss_mean:  tensor(0.0013, device='cuda:0')
-elif(config == "4"):
-    deformed_model = '/home/elham/Desktop/FoldingNet/nvp_folding_1024dim_ycb_cosinusAneal_50End2End/'
-    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/'
-    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
-    #path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each_folding_3000_1024dim/logs/model_lowest_cd_loss.pth'
-    args["k"]=1024
-    coeff = 8
-#loss_mean:  tensor(0.0009, device='cuda:0') scissor tensor(0.0003)
-elif(config == "5"):
-    deformed_model = '/home/elham/Desktop/FoldingNet/nvp_2018_1024dim_ycb_cosinusAneal_50End/'
-    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val/'
-    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
+    deformed_model = '/home/elham/Desktop/FoldingNet/nvp_2018_1024dim_carDonut_cosinusAneal_End2End/'
     #path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
+    trg_root='/home/elham/hdd/data/car_donut_data/train/'
+    src_root='/home/elham/hdd/data/car_donut_data/src/'
     args["k"]=1024
     coeff = 8
-#loss_mean:  tensor(0.0002, device='cuda:0')
-elif(config == "6"):
-    deformed_model = '/home/elham/Desktop/FoldingNet/nvp_2018_1024dim_ycb_1seq_sc_cosinusAneal_50_End2End/'
-    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val_sc/'
-    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/in'
-    #path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each_folding_3000_1024dim/logs/model_lowest_cd_loss.pth'
-    args["k"]=1024
-    coeff = 8
-#loss_mean:  tensor(0.0004, device='cuda:0')
-elif(config == "7"):
-    deformed_model = '/home/elham/Desktop/FoldingNet/nvp_2018_1024dim_ycb_1000seq_sc_cosinusAneal_20_End2End/'
-    trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_1_thousand_seq/val/'
-    src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_1_thousand_seq/in'
-    #path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
-    args["k"]=1024
-    coeff = 8
-#loss_mean:  tensor(0.0016, device='cuda:0') just sc: (0.0005)
-elif(config == "8"):
-    deformed_model = '/home/elham/Desktop/FoldingNet/nvp_2018_1024dim_ycb_1000seq_5ycb_cosinusAneal_20End/'
-    trg_root='/home/elham/hdd/data/ycb/ycb_mult_5_thousand_seq/val/'
-    src_root='/home/elham/hdd/data/ycb/ycb_mult_5_thousand_seq/in/'
-    #trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_1_thousand_seq/val/'
-    #src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_1_thousand_seq/in'
-    #path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
-    args["k"]=1024
-    coeff = 8
-    from dataset_meshes1000 import Dataset_mesh, Dataset_mesh_objects, collate_fn
-    justSc = False
-    if(justSc):
-        trg_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_1_thousand_seq/val/'
-        src_root='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_1_thousand_seq/in'
 
 path_load_check_decoder = deformed_model+'check/'+ 'check_min'+'.pt'
 os.makedirs(deformed_model+ 'check', exist_ok=True)

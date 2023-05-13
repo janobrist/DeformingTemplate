@@ -41,15 +41,15 @@ args = vars(parser.parse_args())
 config='4'
 
 if(config=="4"):
-    auto="auto2018_1024dim_3000points_NoAug_1000seq_5ycb"
-    trainName='/ycb_mult_5_thousand_seq/train/'
-    valName='/ycb_mult_5_thousand_seq/val/'
-    inName='/ycb_mult_5_thousand_seq/in'
-    deformName='nvp_2018_1024dim_ycb_1000seq_5ycb_cosinusAneal_20/'
+    auto="auto2018_1024dim_3000points_NoAug_car-donuts"
+    trainName='/car_donut_data/train/'
+    valName='/car_donut_data/train/'
+    inName='/car_donut_data/src'
+    deformName='nvp_2018_1024dim_carDonut_cosinusAneal_End2End/'
 
 if(args['euler']):
-    defomed_model = '/hdd/eli/'+deformName
-    rootData="/hdd/eli/data/ycb"
+    defomed_model = '/hdd/eli/data'+deformName
+    rootData="/hdd/eli"
     train_deformed=rootData+trainName
     train_src=rootData+inName
     valid_deformed=rootData+valName
@@ -60,17 +60,18 @@ if(args['euler']):
         device = torch.device("cuda:3")
 else:
     defomed_model = './'+deformName
-    rootData="/home/elham/hdd/data/ycb"#"/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path"
+    rootData="/home/elham/hdd/data"#"/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path"
     train_deformed=rootData+trainName
     train_src=rootData+inName
     valid_deformed=rootData+valName
     valid_src=rootData+inName
     #path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each_2018_1024dim/logs/model_lowest_cd_loss.pth'
-    path_autoencoder='./'+auto+'/models/check_min.pt'
+    path_autoencoder='/home/elham/hdd/'+auto+'/models/check_min.pt'
+    print(path_autoencoder)
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
 
-B = 8
+B = 4
 #print('before')
 training_dataset = Dataset_mesh_objects(trg_root=train_deformed, src_root=train_src)
 train_dataloader = DataLoader(training_dataset, batch_size=B, shuffle=True, collate_fn=lambda b, device=device: collate_fn(b, device), drop_last=True)
@@ -154,7 +155,7 @@ else:
 Nepochs = 500000
 
 w_chamfer = 1.0
-print('here3')
+#print('here3')
 w_edge = 0 #1.0
 
 w_normal = 1.0 #0.01
@@ -179,10 +180,10 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
     for i, item in enumerate(train_dataloader):
 
         #print('i: ',i)
-        start = time.time()
+        #start = time.time()
         orig_verts_trg, orig_faces_trg, orig_verts_src, orig_faces_src, changedItem=item
 
-        print('item reading: ', time.time()- start)
+        #print('item reading: ', time.time()- start)
         #print('orig_verts_trg: ', len(orig_verts_trg))
         #print('orig_verts_trg 0: ', orig_verts_trg[0].shape)
         #print('orig_verts_trg 1: ', orig_verts_trg[1].shape)
@@ -213,11 +214,11 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
 
         src_mesh = Meshes(verts=src_mesh_verts_rightSize, faces=src_mesh_faces_rightSize)
 
-        print('creating meshes: ', time.time()- start)
+        #print('creating meshes: ', time.time()- start)
         
         seq_pc_trg = sample_points_from_meshes(trg_mesh, numOfPoints).to(device)
 
-        print('sample points: ', time.time()- start)
+        #print('sample points: ', time.time()- start)
         #seq_pc_src = sample_points_from_meshes(src_mesh, 4000).to(device)
 
         #with torch.no_grad():
@@ -227,7 +228,7 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         else:
             code_trg = network.encoder(seq_pc_trg.permute(0, 2, 1))
 
-        print('encode: ', time.time()- start)
+        #print('encode: ', time.time()- start)
         #print('code_trg.shape: ', code_trg.shape)
         b, k = code_trg.shape
 
@@ -235,17 +236,17 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
 
         #print('code trg shape: ', code_trg.shape)
         #print('query shape: ', query.shape)
-        beforeDecoder = time.time()
+        #beforeDecoder = time.time()
         coordinates = homeomorphism_decoder.forward(code_trg, query)
-        print('decode: ', time.time()- start )
+        #print('decode: ', time.time()- start )
         #print('coordinates shape: ', coordinates.shape)
 
-        coordinates = coordinates.reshape(B, 9000, 3)
+        coordinates = coordinates.reshape(B, 16000, 3)
 
-        loopstart= time.time()
+        #loopstart= time.time()
         new_src_mesh_verts_rightSize = [coordinates[s][:num_points[s]]for s in range(B)]
-        loopend = time.time()
-        print('loop time: ', loopend - loopstart)
+        #loopend = time.time()
+        #print('loop time: ', loopend - loopstart)
         new_src_mesh_faces_rightSize = src_mesh_faces_rightSize#.to(device) #[changedItem['faces_src'][s][:num_faces[s]].to(device) for s in range(B)]
 
         new_src_mesh = Meshes(verts=new_src_mesh_verts_rightSize, faces=new_src_mesh_faces_rightSize)
@@ -258,19 +259,19 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
 
         loss_chamfer, _ = chamfer_distance(sample_trg, new_sample_src)
         loss = loss_chamfer * w_chamfer
-        print('loss: ',loss)
+        #print('loss: ',loss)
         losses.append(loss)
 
         
-        backstart = time.time()
+        #backstart = time.time()
         loss.backward()
         optimizer.step()
         scheduler.step()
-        backend = time.time()
-        print('back time: ', backend - backstart)
+        #backend = time.time()
+        #print('back time: ', backend - backstart)
 
-        end = time.time()
-        print('how long did it take: ', end-start)
+        #end = time.time()
+        #print('how long did it take: ', end-start)
 
 
         #final_verts, final_faces = new_src_mesh.get_mesh_verts_faces(0)
@@ -344,7 +345,7 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
 
         with torch.no_grad():
             coordinates = homeomorphism_decoder.forward(code_trg, query)
-        coordinates = coordinates.reshape(B, 9000, 3)
+        coordinates = coordinates.reshape(B, 16000, 3)
 
         new_src_mesh_verts_rightSize = [coordinates[s][:num_points[s]]for s in range(B)]
         #new_src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]].to(device) for s in range(B)]

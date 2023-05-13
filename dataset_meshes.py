@@ -139,8 +139,8 @@ def collate_fn(data):
     """
     #print('data[0]: ', data[0])
     #device='cuda:0'
-    maxPoints = 9000
-    maxFaces = 17000
+    maxPoints = 16000
+    maxFaces = 32000
     #_, labels, lengths = zip(*data)
     #max_len = max(lengths)
     #n_ftrs = data[0][0].size(1)

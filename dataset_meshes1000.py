@@ -105,14 +105,19 @@ class Dataset_mesh_objects(Dataset):
         #src
         ##########################################################################################################################
         #print('self.paths[idx]: ', self.paths[idx])
-        parts=self.paths[idx].split('_')
-        if(len(parts) == 3):
+        if('car' in self.paths[idx] or 'donut' in self.paths[idx]):
+            parts=self.paths[idx].split('-')
             nameSrc=parts[0]+'.off'
         else:
-            nameSrc=parts[0]+'_'+parts[1]+'.off'
+            parts=self.paths[idx].split('_')
+            print('parts: ', parts)
+            if(len(parts) == 3):
+                nameSrc=parts[0]+'.off'
+            else:
+                nameSrc=parts[0]+'_'+parts[1]+'.off'
         #print('length of : ',len(self.paths[idx].split('_')))
         #nameSrc = self.paths[idx].split('_')[]+'.off'
-        print('nameSrc: ', nameSrc)
+        #print('nameSrc: ', nameSrc)
         mesh_src_Path = os.path.join(self.src_root, nameSrc)
         #print('the path: ', mesh_src_Path)
         mesh_src_obj = trimesh.load(mesh_src_Path)
@@ -136,7 +141,7 @@ class Dataset_mesh_objects(Dataset):
         verts_src_obj = verts_src_obj/scale_src_obj
 
 
-        return {'vertices_src': verts_src_obj, 'faces_src': faces_src_idx_obj, 'vertices_trg': verts_trg_obj, 'faces_trg': faces_trg_idx_obj, 'name': self.paths[idx], 'center_obj': center_trg_obj, 'scale_obj':scale_trg_obj, 'num_points':num_trg_points, 'num_faces':num_trg_faces}
+        return {'vertices_src': verts_src_obj, 'faces_src': faces_src_idx_obj, 'vertices_trg': verts_trg_obj, 'faces_trg': faces_trg_idx_obj, 'name': self.paths[idx], 'center_obj': center_trg_obj, 'scale_obj':scale_trg_obj, 'num_points':num_trg_points, 'num_faces':num_trg_faces, 'scale_src':scale_src_obj, 'center_src':center_src_obj}
 
 def collate_fn(data, device):
     """
@@ -146,8 +151,8 @@ def collate_fn(data, device):
     """
     #print('data[0]: ', data[0])
     #device='cuda:0'
-    maxPoints = 9000
-    maxFaces = 17000
+    maxPoints = 16000#9000
+    maxFaces = 32000#17000
     #_, labels, lengths = zip(*data)
     #max_len = max(lengths)
     #n_ftrs = data[0][0].size(1)
@@ -162,7 +167,7 @@ def collate_fn(data, device):
     orig_faces_src = []
     #labels = torch.tensor(labels)
     #lengths = torch.tensor(lengths)
-    print('len: ', len(data))
+    #print('len: ', len(data))
     for i in range(len(data)):
         num_points = data[i]['num_points']
         num_faces = data[i]['num_faces']
@@ -208,11 +213,13 @@ def collate_fn(data, device):
     name = [el['name'] for el in data]
     centers = torch.cat([el['center_obj'].unsqueeze(0) for el in data], dim=0)
     scale_obj = [el['scale_obj'] for el in data]
+    centers_src = torch.cat([el['center_src'].unsqueeze(0) for el in data], dim=0)
+    scale_src = [el['scale_src'] for el in data]
     num_points = [el['num_points'] for el in data]
     num_faces = [el['num_faces'] for el in data]
     
     
-    return orig_verts_trg, orig_faces_trg, orig_verts_src, orig_faces_src, {'vertices_trg': verts_trg, 'faces_trg': faces_trg, 'vertices_src': verts_src, 'faces_src': faces_src, 'name': name, 'center_obj':centers, 'scale_obj':scale_obj, 'num_points':num_points, 'num_faces':num_faces}
+    return orig_verts_trg, orig_faces_trg, orig_verts_src, orig_faces_src, {'vertices_trg': verts_trg, 'faces_trg': faces_trg, 'vertices_src': verts_src, 'faces_src': faces_src, 'name': name, 'center_obj':centers, 'scale_obj':scale_obj, 'num_points':num_points, 'num_faces':num_faces, 'center_src':centers_src, 'scale_src':scale_src}
 
     return {'vertices_trg': verts_trg, 'faces_trg': faces_trg, 'vertices_src': verts_src, 'faces_src': faces_src, 'name': name, 'center_obj':centers, 'scale_obj':scale_obj, 'num_points':num_points, 'num_faces':num_faces}
 

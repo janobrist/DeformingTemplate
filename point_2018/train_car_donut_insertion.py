@@ -28,7 +28,7 @@ if(args.euler):
         DEVICE = torch.device("cuda:2")
     dataset_path_train='/hdd/eli/data/ycb/car_donut_data/train'
     dataset_path_val='/hdd/eli/data/car_donut_data/train' 
-    folder='/hdd/eli/auto2018_1024dim_3000points_NoAug_car-donuts'
+    folder='/hdd/eli/auto2018_1024dim_3000points_NoAug_insertion_car-donuts'
 else:
     dataset_path_train='/home/elham/hdd/data/car_donut_data/train'
     dataset_path_val='/home/elham/hdd/data/car_donut_data/train'
