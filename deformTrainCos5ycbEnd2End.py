@@ -20,7 +20,7 @@ from pytorch3d.loss import (
     mesh_normal_consistency,
 )
 import trimesh
-from dataset_meshes1000 import Dataset_mesh, Dataset_mesh_objects, collate_fn
+from dataset_meshes import Dataset_mesh, Dataset_mesh_objects, collate_fn_nofor
 from torch.utils.data import DataLoader
 import random
 from foldingNet_model import AutoEncoder
@@ -59,24 +59,24 @@ if(args['euler']):
     if torch.cuda.is_available():
         device = torch.device("cuda:3")
 else:
-    defomed_model = './'+deformName
+    defomed_model = '/home/elham/srl-nas/elham/research_project/logs/'+deformName
     rootData="/home/elham/hdd/data/ycb"#"/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path"
     train_deformed=rootData+trainName
     train_src=rootData+inName
     valid_deformed=rootData+valName
     valid_src=rootData+inName
-    #path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each_2018_1024dim/logs/model_lowest_cd_loss.pth'
-    path_autoencoder='./'+auto+'/models/check_min.pt'
+    #path_autoencoder='/home/elham/Desktop/deformTemplate/first_50_each_2018_1024dim/logs/model_lowest_cd_loss.pth'
+    path_autoencoder='/home/elham/srl-nas/elham/research_project/logs/'+auto+'/models/check_min.pt'
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
 
 B = 8
 #print('before')
-training_dataset = Dataset_mesh_objects(trg_root=train_deformed, src_root=train_src)
-train_dataloader = DataLoader(training_dataset, batch_size=B, shuffle=True, collate_fn=lambda b, device=device: collate_fn(b, device), drop_last=True)
+training_dataset = Dataset_mesh_objects(trg_root=train_deformed, src_root=train_src, lastConfig=True)
+train_dataloader = DataLoader(training_dataset, batch_size=B, shuffle=True, collate_fn=lambda b, device=device: collate_fn_nofor(b, device), drop_last=True)
 
-valid_dataset = Dataset_mesh_objects(trg_root=valid_deformed, src_root=valid_src)
-valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=True, collate_fn=lambda b, device=device: collate_fn(b, device), drop_last=True)
+valid_dataset = Dataset_mesh_objects(trg_root=valid_deformed, src_root=valid_src, lastConfig=True)
+valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=True, collate_fn=lambda b, device=device: collate_fn_nofor(b, device), drop_last=True)
 #print('after')
 
 

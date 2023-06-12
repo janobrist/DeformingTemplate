@@ -45,11 +45,11 @@ if(config=="4"):
     trainName='/car_donut_data/train/'
     valName='/car_donut_data/train/'
     inName='/car_donut_data/src'
-    deformName='nvp_2018_1024dim_carDonut_cosinusAneal_End2End/'
-
+    deformName='nvp_2018_1024dim_carDonut_cosinusAneal_End2End_ONLY/'
+NoPretrain=True
 if(args['euler']):
-    defomed_model = '/hdd/eli/data'+deformName
-    rootData="/hdd/eli"
+    defomed_model = '/hdd/eli'+deformName
+    rootData="/hdd/eli/data"
     train_deformed=rootData+trainName
     train_src=rootData+inName
     valid_deformed=rootData+valName
@@ -130,11 +130,12 @@ network.to(device)
 
 
 check_auto = torch.load(path_autoencoder, map_location='cuda:0')
-if(args['encoder_type'] == '2018'):
-    #print('here')
-    network.load_state_dict(check_auto["model"])
-else:
-    network.load_state_dict(check_auto["model_state_dict"])
+if(not NoPretrain):
+    if(args['encoder_type'] == '2018'):
+        #print('here')
+        network.load_state_dict(check_auto["model"])
+    else:
+        network.load_state_dict(check_auto["model_state_dict"])
 
 #print('here2')
 #optimizer = optim.Adam(homeomorphism_decoder.parameters(), lr=5e-4, weight_decay=1e-5)

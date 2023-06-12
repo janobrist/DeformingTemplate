@@ -89,17 +89,17 @@ class Trainer:
             pcd = o3d.geometry.PointCloud()
             #print('x shape: ', x.shape)
             b, _,_= x.shape
-            # if(e % 100 == 0):
-            #     for i in range(0, b): 
-            #         x_ = (x[i,...].permute(1,0) * scale[i].to('cuda')+ mean[i].to('cuda'))
-            #         pcd.points = o3d.utility.Vector3dVector(np.float32(x_.cpu().numpy()))#.float32)
-            #         o3d.io.write_point_cloud(self.folder+'/plies/file_'+str(e)+'_'+p[i]+'.ply', pcd)
+            if(e % 1 == 0):
+                for i in range(0, b): 
+                    x_ = (x[i,...].permute(1,0) * scale[i].to('cuda')+ mean[i].to('cuda'))
+                    pcd.points = o3d.utility.Vector3dVector(np.float32(x_.cpu().numpy()))#.float32)
+                    o3d.io.write_point_cloud(self.folder+'/plies/file_'+str(e)+'_'+p[i]+'.ply', pcd)
 
-            #         pcd = o3d.geometry.PointCloud()
-            #         #print('x shape: ', x.shape)
-            #         x_restored_ = (x_restored[i,...].permute(1,0) * scale[i].to('cuda')+ mean[i].to('cuda'))
-            #         pcd.points = o3d.utility.Vector3dVector(np.float32(x_restored_.cpu().numpy()))#.float32)
-            #         o3d.io.write_point_cloud(self.folder+'/plies/file_restorated'+str(e)+'_'+p[i]+'.ply', pcd)
+                    pcd = o3d.geometry.PointCloud()
+                    #print('x shape: ', x.shape)
+                    x_restored_ = (x_restored[i,...].permute(1,0) * scale[i].to('cuda')+ mean[i].to('cuda'))
+                    pcd.points = o3d.utility.Vector3dVector(np.float32(x_restored_.cpu().numpy()))#.float32)
+                    o3d.io.write_point_cloud(self.folder+'/plies/file_restorated'+str(e)+'_'+p[i]+'.ply', pcd)
 
         
 

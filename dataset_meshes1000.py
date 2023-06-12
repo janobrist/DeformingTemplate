@@ -117,7 +117,7 @@ class Dataset_mesh_objects(Dataset):
                 nameSrc=parts[0]+'_'+parts[1]+'.off'
         #print('length of : ',len(self.paths[idx].split('_')))
         #nameSrc = self.paths[idx].split('_')[]+'.off'
-        #print('nameSrc: ', nameSrc)
+        print('nameSrc: ', nameSrc)
         mesh_src_Path = os.path.join(self.src_root, nameSrc)
         #print('the path: ', mesh_src_Path)
         mesh_src_obj = trimesh.load(mesh_src_Path)

@@ -24,46 +24,46 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--encoder_type', type=str, default='2018')
 args = parser.parse_args()
 
-config='1'
+config='3'
 #Mean Chamfer Distance of all Point Clouds: tensor(0.0010)
 if(config == "0"):
-    folder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_256dim_3000points_NoAug_1seq_5ycb/'
+    folder='/home/elham/srl-nas/elham/research_project/logs/auto2018_256dim_3000points_NoAug_1seq_5ycb/'
     args.k=256
-    val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val'
-#Mean Chamfer Distance of all Point Clouds: tensor(0.0010)
+    val_folder='/home/elham/srl-nas/elham/watertight/ycb/ycb_mult_5_one_seq/val'
+#Mean Chamfer Distance of all Point Clouds: tensor(0.0010) scissor tensor(0.0007)
 elif(config == "1"):
-    folder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/'
+    folder='/home/elham/srl-nas/elham/research_project/logs/auto2018_1024dim_3000points_NoAug_1seq_5ycb/'
     args.k=1024
-    val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val'
+    val_folder='/home/elham/srl-nas/elham/watertight/ycb/ycb_mult_5_one_seq/val'
 #Mean Chamfer Distance of all Point Clouds: tensor(0.0011)
 elif(config == "2"):
-    folder='/home/elham/Desktop/FoldingNet/first_50_each_folding_3000_256dim'
+    folder='/home/elham/srl-nas/elham/research_project/logs/first_50_each_folding_3000_256dim'
     args.k=256
-    val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val'
+    val_folder='/home/elham/srl-nas/elham/watertight/ycb/ycb_mult_5_one_seq/val'
 #Mean Chamfer Distance of all Point Clouds: tensor(0.0011)
 elif(config == "3"):
-    folder='/home/elham/Desktop/FoldingNet/first_50_each_folding_3000_1024dim'
+    folder='/home/elham/srl-nas/elham/research_project/logs/first_50_each_folding_3000_1024dim'
     args.k=1024
-    val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val'
+    val_folder='/home/elham/srl-nas/elham/watertight/ycb/ycb_mult_5_one_seq/val'
 #Mean Chamfer Distance of all Point Clouds: tensor(0.0002)
 elif(config == "4"):
-    folder='/home/elham/Desktop/FoldingNet/auto2018_1024dim_3000points_NoAug_1000seq_scissor'
+    folder='/home/elham/srl-nas/elham/research_project/logs/auto2018_1024dim_3000points_NoAug_1000seq_scissor'
     args.k=1024
-    val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_1_thousand_seq/val'
+    val_folder='/home/elham/srl-nas/elham/watertight/ycb/ycb_mult_1_thousand_seq/val'
 #Mean Chamfer Distance of all Point Clouds: tensor(0.0002)
 elif(config == "5"):
-    folder='/home/elham/Desktop/FoldingNet/auto2018_1024dim_3000points_NoAug_1seq_scissor'
+    folder='/home/elham/srl-nas/elham/research_project/logs/auto2018_1024dim_3000points_NoAug_1seq_scissor'
     args.k=1024
-    val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val_sc'
+    val_folder='/home/elham/srl-nas/elham/watertight/ycb/ycb_mult_5_one_seq/val_sc'
 #Mean Chamfer Distance of all Point Clouds: tensor(0.0010) just sc: (0.0003)
 elif(config == "6"):
-    folder='/home/elham/Desktop/FoldingNet/auto2018_1024dim_3000points_NoAug_1000seq_5ycb'
+    folder='/home/elham/srl-nas/elham/research_project/logs/auto2018_1024dim_3000points_NoAug_1000seq_5ycb'
     args.k=1024
     #val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_1_thousand_seq/val'
     val_folder='/home/elham/hdd/data/ycb/ycb_mult_5_thousand_seq/val'
     justSc = False
     if(justSc):
-        val_folder='/home/elham/Desktop/makeDataset/warping/warping_shapes_generation/build_path/ycb_mult_5_one_seq/val_sc'
+        val_folder='/home/elham/srl-nas/elham/watertight/ycb/ycb_mult_5_one_seq/val_sc'
 
 numOfPoints =  3000
 test_dataset = PointClouds(val_folder, is_training=True, num_points=numOfPoints)
@@ -72,15 +72,7 @@ if(config == "0" or config == "1" or config == "4" or config == "5" or config ==
     args.encoder_type = "2018"
 else:
     args.encoder_type = "folding"
-#test_dataset = ShapeNetPartDataset(root='/home/rico/Workspace/Dataset/shapenet_part/shapenetcore_partanno_segmentation_benchmark_v0',
-#                                   npoints=2048, split='test', classification=False, data_augmentation=True)
 
-#Dataset_mesh_objects()
-
-#test_dataset = Dataset_mesh_objects(trg_root='./car-donut-train', src_root='./srcMeshes')
-#train_dataloader = DataLoader(training_dataset, batch_size=B, shuffle=True, collate_fn=collate_fn)
-
-#test_dataset = 
 device='cuda:0'
 test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=4, shuffle=False, num_workers=4)
 if(args.encoder_type == '2018'):
@@ -98,7 +90,7 @@ if(args.encoder_type == '2018'):
 elif(args.encoder_type == 'folding'):
     autoencoder = AutoEncoder(k=args.k)
 
-#folder='/home/elham/Desktop/FoldingNet/first_50_each_2018_256dim'
+#folder='/home/elham/Desktop/deformTemplate/first_50_each_2018_256dim'
 
 os.makedirs(folder+'/plies/', exist_ok=True)
 if(args.encoder_type == '2018'):
@@ -153,6 +145,7 @@ with torch.no_grad():
         #print('x shape: ', x.shape)
         for i in range(b):
             x_restored_ = (recons[i,...].permute(1,0) * scale[i].to('cuda')+ mean[i].to('cuda'))
+            print('x_restored_ shape: ', x_restored_.shape)
             pcd.points = o3d.utility.Vector3dVector(np.float32(x_restored_.cpu().numpy()))#.float32)
             print('folder name: ', folder+'/plies/decoded_'+p[i]+'.ply')
             o3d.io.write_point_cloud(folder+'/plies/decoded_'+p[i]+'.ply', pcd)

@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser()
 import trimesh
 
 NUM_EPOCHS = 1000000
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 
 
 TRAIN_PATH = ''
@@ -32,7 +32,7 @@ if(args.euler):
 else:
     dataset_path_train='/home/elham/hdd/data/car_donut_data/train'
     dataset_path_val='/home/elham/hdd/data/car_donut_data/train'
-    folder='../auto2018_1024dim_3000points_NoAug_car-donuts' 
+    folder='../testtestauto2018_1024dim_3000points_NoAug_car-donuts' 
     if torch.cuda.is_available():
         DEVICE = torch.device("cuda:0")
 

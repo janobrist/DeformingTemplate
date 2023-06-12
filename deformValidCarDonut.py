@@ -20,7 +20,7 @@ from pytorch3d.loss import (
     mesh_normal_consistency,
 )
 import trimesh
-from dataset_meshes import Dataset_mesh, Dataset_mesh_objects, collate_fn
+from dataset_meshes_test import Dataset_mesh, Dataset_mesh_objects, collate_fn
 from torch.utils.data import DataLoader
 import random
 from foldingNet_model import AutoEncoder
@@ -31,18 +31,11 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
-#deformed_model = './nvp_2018_1024dim_ycb_cosinusAneal_50/'
-config='0'
+config='1'
+moreFaces=False
+B = 1
 
-B = 128
-#path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
 
-#path_autoencoder='/home/elham/Desktop/FoldingNet/first_50_each/logs/model_epoch_9000.pth'
-
-#print('after')
-#print('path:' ,path)
-
-#print('here')
 parser = argparse.ArgumentParser(description="Just an example", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("-l", "--load", action="store_true", help="checksum blocksize")
 parser.add_argument('--k', "--k", type=int, default=1024)
@@ -50,27 +43,39 @@ parser.add_argument('--encoder_type', type=str, default='folding')
 
 args = vars(parser.parse_args())
 
-
+#0.0006
 if(config == "0"):
-    deformed_model = '/home/elham/Desktop/FoldingNet/nvp_2018_1024dim_carDonut_cosinusAneal_End2End/'
+    deformed_model = '/home/elham/srl-nas/elham/research_project/logs/nvp_2018_1024dim_carDonut_cosinusAneal_End2End/'
     #path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
-    trg_root='/home/elham/hdd/data/car_donut_data/train/'
-    src_root='/home/elham/hdd/data/car_donut_data/src/'
+    trg_root='/home/elham/hdd/data/car_donut_data/train_car/'
+    src_root='/home/elham/hdd/data/car_donut_data/test_in/'
+    args["k"]=1024
+    coeff = 8
+#0.0006
+elif(config == "1"):
+    deformed_model = '/home/elham/srl-nas/elham/research_project/logs/nvp_2018_1024dim_carDonut_cosinusAneal_End2End_ONLY/'
+    #path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
+    trg_root='/home/elham/hdd/data/car_donut_data/train_car/'
+    src_root='/home/elham/hdd/data/car_donut_data/test_in/'
     args["k"]=1024
     coeff = 8
 
+    
+
 path_load_check_decoder = deformed_model+'check/'+ 'check_min'+'.pt'
 os.makedirs(deformed_model+ 'check', exist_ok=True)
+os.makedirs(deformed_model + 'meshes_valid_morefaces', exist_ok=True)
 os.makedirs(deformed_model + 'meshes_valid', exist_ok=True)
 os.makedirs(deformed_model + 'meshes_trg_val', exist_ok=True)
 os.makedirs(deformed_model + 'meshes_src_val', exist_ok=True)
+os.makedirs(deformed_model + 'gt_sampled_pcl', exist_ok=True)
 os.makedirs(deformed_model + 'meshes_compare_deform_decode', exist_ok=True)
 
 
 device='cuda:0'
-valid_dataset = Dataset_mesh_objects(trg_root=trg_root, src_root=src_root)
+valid_dataset = Dataset_mesh_objects(trg_root=trg_root, src_root=src_root, moreFaces=moreFaces)
 if(config=="8"):
-    valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=True, collate_fn=lambda b, device=device: collate_fn(b, device), drop_last=True)
+    valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=True, collate_fn=lambda b, device=device: collate_fn(b, device, moreFaces), drop_last=True)
 else:
     valid_dataloader = DataLoader(valid_dataset, batch_size=B, shuffle=False, collate_fn=collate_fn)
 
@@ -124,8 +129,6 @@ device = torch.device('cuda')
 network.to(device)
 
 
-#check_auto = torch.load(path_autoencoder)
-#network.load_state_dict(check_auto["model_state_dict"])
 if(not 'End' in deformed_model):
     check_auto = torch.load(path_autoencoder, map_location='cuda:0')
     #print('check_auto: ', check_auto['model_state_dict'].keys())
@@ -135,9 +138,7 @@ if(not 'End' in deformed_model):
         #print(check_auto["model_state_dict"])
         network.load_state_dict(check_auto["model_state_dict"])
 
-#optimizer = optim.Adam(homeomorphism_decoder.parameters(), lr=5e-4, weight_decay=1e-5)
-#scheduler = CosineAnnealingLR(optimizer, T_max=10000, eta_min=1e-7)
-#optimizer = torch.optim.SGD([homeomorphism_decoder.parameters()], lr=lr, momentum=0.0)
+
 
 if(args['load']):
     checkpoint = torch.load(path_load_check_decoder, map_location='cuda:0')
@@ -206,11 +207,17 @@ for i, item in enumerate(valid_dataloader):
         num_points = item['num_points']
         num_faces = item['num_faces']
         B,_,_ = item['vertices_src'].shape
-        trg_mesh_verts_rightSize = [item['vertices_trg'][s][:num_points[s]]for s in range(B)]
-        trg_mesh_faces_rightSize = [item['faces_trg'][s][:num_faces[s]]for s in range(B)]
+        num_points=15018
+        num_faces=30032
+        trg_mesh_verts_rightSize = [item['vertices_trg'][s][:num_points]for s in range(B)]
+        trg_mesh_faces_rightSize = [item['faces_trg'][s][:num_faces]for s in range(B)]
 
-        src_mesh_verts_rightSize = [item['vertices_src'][s][:num_points[s]]for s in range(B)]
-        src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]]for s in range(B)]
+        if(moreFaces):
+            print('in more')
+            num_points=27588
+            num_faces=55172
+        src_mesh_verts_rightSize = [item['vertices_src'][s][:num_points]for s in range(B)]
+        src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces]for s in range(B)]
 
 
 
@@ -218,6 +225,7 @@ for i, item in enumerate(valid_dataloader):
     src_mesh = Meshes(verts=src_mesh_verts_rightSize, faces=src_mesh_faces_rightSize)
     
     seq_pc_trg = sample_points_from_meshes(trg_mesh, numOfPoints).to('cuda')
+
     seq_pc_src = sample_points_from_meshes(src_mesh, numOfPoints).to('cuda')
 
     begCode= time.time()
@@ -246,15 +254,15 @@ for i, item in enumerate(valid_dataloader):
         coordinates = homeomorphism_decoder.forward(code_trg, query)
     endDef= time.time()
 
-    #print('coordinates shape: ', coordinates.shape)
-    coordinates = coordinates.reshape(B, 9000, 3)
+    print('coordinates shape: ', coordinates.shape)
+    coordinates = coordinates.reshape(B, 50000, 3)
 
-    new_src_mesh_verts_rightSize = [coordinates[s][:num_points[s]]for s in range(B)]
+    new_src_mesh_verts_rightSize = [coordinates[s][:num_points]for s in range(B)]
     if(config == "8"):
         new_src_mesh_faces_rightSize = src_mesh_faces_rightSize#.to('cuda')
         #new_src_mesh_faces_rightSize = [changedItem['faces_src'][s][:num_faces[s]].to('cuda') for s in range(B)]
     else:
-        new_src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces[s]].to('cuda') for s in range(B)]
+        new_src_mesh_faces_rightSize = [item['faces_src'][s][:num_faces].to('cuda') for s in range(B)]
 
     new_src_mesh = Meshes(verts=new_src_mesh_verts_rightSize, faces=new_src_mesh_faces_rightSize)
     end = time.time()
@@ -310,7 +318,7 @@ for i, item in enumerate(valid_dataloader):
         # final_verts_trg = final_verts_trg * scale_trg + center_trg
         # final_obj_trg = os.path.join(deformed_model+'meshes_trg_val/', 'trg_mesh_'+name.split('.')[0]+'_'+'.off')
         # save_obj(final_obj_trg, final_verts_trg, final_faces_trg)
-        
+
 
         print(item.keys())
         scale_trg = item['scale_obj'][i_item].to(device)
@@ -319,7 +327,10 @@ for i, item in enumerate(valid_dataloader):
         center_src = item['center_src'][i_item].to(device)
         final_verts, final_faces = new_src_mesh.get_mesh_verts_faces(i_item)
         final_verts = final_verts * scale_trg + center_trg
-        final_obj = os.path.join(deformed_model+'meshes_valid/', 'mesh_'+name.split('.')[0]+'_'+'.obj')
+        if(moreFaces):
+            final_obj = os.path.join(deformed_model+'meshes_valid_morefaces/', 'mesh_'+name.split('.')[0]+'_'+'.obj')
+        else:
+            final_obj = os.path.join(deformed_model+'meshes_valid/', 'mesh_'+name.split('.')[0]+'_'+'.obj')
         #save_obj(final_obj, final_verts, final_faces)
 
         final_verts_trg, final_faces_trg = trg_mesh.to(device).get_mesh_verts_faces(i_item)
@@ -369,7 +380,11 @@ for i, item in enumerate(valid_dataloader):
 
         
             
-
+        pcd = o3d.geometry.PointCloud()
+        print('seq_pc_trg[i_item] shape: ', seq_pc_trg[i_item].shape)
+        pcd.points = o3d.utility.Vector3dVector(seq_pc_trg[i_item].cpu().detach().numpy()* scale_trg.cpu().detach().numpy() + center_trg.cpu().detach().numpy())
+        gt_pcl = os.path.join(deformed_model+'gt_sampled_pcl/', 'pcl_'+name.split('.')[0]+'_'+'.ply')
+        o3d.io.write_point_cloud(gt_pcl, pcd)
 
 
 for key in keys:
