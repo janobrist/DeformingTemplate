@@ -124,7 +124,7 @@ elif(config == "8"):
     #path_autoencoder='/home/elham/Desktop/point-cloud-autoencoder/auto2018_1024dim_3000points_NoAug_1seq_5ycb/models/check_min.pt'
     args["k"]=1024
     coeff = 8
-    #from dataset_meshes1000 import Dataset_mesh, Dataset_mesh_objects, collate_fn
+
     justSc = False
     lastConfig=True
     if(justSc):

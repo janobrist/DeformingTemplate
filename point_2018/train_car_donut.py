@@ -69,14 +69,6 @@ def train_and_evaluate():
     logs = []
     text = 'e: {0}, i: {1}, loss: {2:.3f}'
 
-    #path_encoder='./models_pointnetEncoder2018paper_3000points_256Dim_noAug/check18500.pt'
-    #check_auto = torch.load(path_encoder)
-    #print('check_auto keys: ', check_auto['model'].keys())
-    #model.network.homeomorphism_encoder.load_state_dict(check_auto['encoder'])
-    #model.network.load_state_dict(check_auto['model'])
-    #model.network.decoder.load_state_dict(check_auto['decoder'])
-    #model.optimizer.load_state_dict(check_auto['optimizer'])
-    #print('model network: ', model.network)
     e_start=0
     #e_start=check_auto['epoch']
     
@@ -89,15 +81,6 @@ def train_and_evaluate():
         losses=[]
         for x, p, mean, scale in train_loader:
             
-            #print('p: ', p)
-            #print('x: ', x)
-            #print('x shape: ', x.shape)
-            #pt = x[5,...].cpu().permute(1, 0)
-            #print('pt.shape: ', pt.shape)
-            #color = np.ones_like(pt)
-            # cloud = trimesh.PointCloud(vertices=pt, colors=color)
-            # cloud.show(background=[0,0,0,0])
-
             x = x.to(DEVICE)
             loss = model.train_step(x)
 
@@ -148,16 +131,7 @@ def train_and_evaluate():
             'optimizer': model.optimizer.state_dict(),
             'epoch':e,
             }, PATHCheckMin+'.pt')
-        #with open(TRAIN_LOGS, 'w') as f:
-        #    json.dump(logs, f)
 
-
-        # eval_losses = {k: sum(d[k] for d in eval_losses)/len(eval_losses) for k in losses.keys()}
-        # eval_losses.update({'type': 'eval'})
-        # print(eval_losses)
-        # logs.append(eval_losses)
-
-        #model.save(PATH)
   
 
 train_and_evaluate()

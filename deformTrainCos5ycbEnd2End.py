@@ -183,15 +183,6 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         orig_verts_trg, orig_faces_trg, orig_verts_src, orig_faces_src, changedItem=item
 
         print('item reading: ', time.time()- start)
-        #print('orig_verts_trg: ', len(orig_verts_trg))
-        #print('orig_verts_trg 0: ', orig_verts_trg[0].shape)
-        #print('orig_verts_trg 1: ', orig_verts_trg[1].shape)
-        #print('orig_faces_trg: ', len(orig_faces_trg))
-        #print('orig_verts_src: ', len(orig_verts_src))
-        #print('orig_faces_src: ', len(orig_faces_src))
-        #print('see this?:',len(first[3]))
-        #print('see this?:',first[3][0].shape)
-        #print('see this?:',sec['vertices_trg'].shape)
         optimizer.zero_grad()
 
 
@@ -213,11 +204,11 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
 
         src_mesh = Meshes(verts=src_mesh_verts_rightSize, faces=src_mesh_faces_rightSize)
 
-        print('creating meshes: ', time.time()- start)
+        #print('creating meshes: ', time.time()- start)
         
         seq_pc_trg = sample_points_from_meshes(trg_mesh, numOfPoints).to(device)
 
-        print('sample points: ', time.time()- start)
+        #print('sample points: ', time.time()- start)
         #seq_pc_src = sample_points_from_meshes(src_mesh, 4000).to(device)
 
         #with torch.no_grad():
@@ -227,7 +218,7 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         else:
             code_trg = network.encoder(seq_pc_trg.permute(0, 2, 1))
 
-        print('encode: ', time.time()- start)
+        #print('encode: ', time.time()- start)
         #print('code_trg.shape: ', code_trg.shape)
         b, k = code_trg.shape
 
@@ -237,7 +228,7 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         #print('query shape: ', query.shape)
         beforeDecoder = time.time()
         coordinates = homeomorphism_decoder.forward(code_trg, query)
-        print('decode: ', time.time()- start )
+        #print('decode: ', time.time()- start )
         #print('coordinates shape: ', coordinates.shape)
 
         coordinates = coordinates.reshape(B, 9000, 3)
@@ -245,7 +236,7 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         loopstart= time.time()
         new_src_mesh_verts_rightSize = [coordinates[s][:num_points[s]]for s in range(B)]
         loopend = time.time()
-        print('loop time: ', loopend - loopstart)
+        #print('loop time: ', loopend - loopstart)
         new_src_mesh_faces_rightSize = src_mesh_faces_rightSize#.to(device) #[changedItem['faces_src'][s][:num_faces[s]].to(device) for s in range(B)]
 
         new_src_mesh = Meshes(verts=new_src_mesh_verts_rightSize, faces=new_src_mesh_faces_rightSize)
@@ -267,10 +258,10 @@ for epoch in range(epoch_start, Nepochs):  # loop over the dataset multiple time
         optimizer.step()
         scheduler.step()
         backend = time.time()
-        print('back time: ', backend - backstart)
+        #print('back time: ', backend - backstart)
 
         end = time.time()
-        print('how long did it take: ', end-start)
+        #print('how long did it take: ', end-start)
 
 
         #final_verts, final_faces = new_src_mesh.get_mesh_verts_faces(0)
