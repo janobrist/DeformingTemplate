@@ -1,8 +1,8 @@
 import torch
-from torch import masked_select, nn
+from torch import nn
 from torch.utils.checkpoint import checkpoint
 import logging
-from projection_layer import get_projection_layer
+from utils.projection_layer import get_projection_layer
 
 
 class CouplingLayer(nn.Module):
@@ -14,19 +14,19 @@ class CouplingLayer(nn.Module):
         self.register_buffer("mask", mask)  # 1,1,1,3
 
     def forward(self, F, y):
-        print('self mask shape: ', self.mask.shape)
-        print('self mask: ', self.mask)
+        #print('self mask shape: ', self.mask.shape)
+        #print('self mask: ', self.mask)
         y1 = y * self.mask
-        print('y1 which is the masked y in coupling shape: ', y1.shape)
+        #print('y1 which is the masked y in coupling shape: ', y1.shape)
         #print('F.shape: ', F.shape)
         #print('self.projection(y1) shape: ', self.projection(y1).shape)
         F_y1 = torch.cat([F, self.projection(y1)], dim=-1)
-        print('after concatting with F: ', F_y1.shape)
+        #print('after concatting with F: ', F_y1.shape)
         #print('F_y1 shape: ', F_y1.shape)
         s = self.map_s(F_y1)
-        print('the results of map_s shape: ', s.shape)
+        #print('the results of map_s shape: ', s.shape)
         t = self.map_t(F_y1)
-        print('the result of map_t shape: ', t.shape)
+        #print('the result of map_t shape: ', t.shape)
 
         x = y1 + (1 - self.mask) * ((y - t) * torch.exp(-s))
         ldj = (-s).sum(-1)
@@ -326,26 +326,23 @@ class NVP_v2_5_frame(nn.Module):
         self._check_shapes(F, x)
         mu, sigma = self._normalize_input(F, x)
         R, t = self._affine_input(F, x)
-        # F: B,N,T,C x: B,N,T,3
         y = x
         y = torch.matmul(y.unsqueeze(-2), R).squeeze(-2) + t
-        #print('what are the number of layers of layer idx', len(self.layer_idx))
-        #print('what are the layers of layer idx', self.layer_idx)
         for i in self.layer_idx:
             # get block condition code
-            print('the shape of F before code projection: ', F.shape)
+            #print('the shape of F before code projection: ', F.shape)
             Fi = self.code_projectors[i](F)
-            print('the shape of Fi after code projection: ', Fi.shape)
+            #print('the shape of Fi after code projection: ', Fi.shape)
             Fi = self._expand_features(Fi, y)
-            print('exapnded shape: ', Fi.shape)
+            #print('exapnded shape: ', Fi.shape)
             # first transformation
             l1 = self.layers1[i]
             y, _ = self._call(l1, Fi, y)
-            print('shape of y after applying the first coupling block', y.shape)
+            #print('shape of y after applying the first coupling block', y.shape)
             # second transformation
             l2 = self.layers2[i]
             y, _ = self._call(l2, Fi, y)
-            print('shape of y after applying the second coupling block', y.shape)
+            #print('shape of y after applying the second coupling block', y.shape)
         #print('took away the mean')
         y = y / sigma + mu
         return y

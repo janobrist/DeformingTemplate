@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from siren import Siren
+from siren_pytorch import Siren
 
 
 class BaseProjectionLayer(nn.Module):
