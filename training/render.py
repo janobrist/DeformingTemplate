@@ -96,19 +96,24 @@ def render_meshes(meshes, camera_parameters, device):
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         # Normalize with ImageNet's mean and std
     ])
+    transform_mask = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224)
+    ])
     raster_settings = RasterizationSettings(
         image_size=1024,
         blur_radius=0.0
     )
     rendered_images = []
+    masks = []
     for i, mesh in enumerate(meshes):
         for extrinsic_matrix, intrinsic_matrix in zip(camera_parameters[i]['extrinsics'], camera_parameters[i]['intrinsics']):
-            rotation = torch.tensor(extrinsic_matrix[:3, :3]).unsqueeze(0).float()
-            translation = torch.tensor(extrinsic_matrix[:3, 3]).unsqueeze(0).float()
+            rotation = extrinsic_matrix[:3, :3].clone().detach().unsqueeze(0).to(dtype=torch.float32)
+            translation = extrinsic_matrix[:3, 3].clone().detach().unsqueeze(0).to(dtype=torch.float32)
 
-            intrinsic_matrix[0, 2] -= 1440-512
+            intrinsic_matrix[0, 2] -= 1400-512
             intrinsic_matrix[1, 2] -= 2600-512
-            camera_matrix = torch.tensor(intrinsic_matrix).unsqueeze(0).float()
+            camera_matrix = intrinsic_matrix.clone().detach().unsqueeze(0).to(dtype=torch.float32)
             image_size = torch.tensor([1024, 1024]).unsqueeze(0)
 
             camera = cameras_from_opencv_projection(rotation, translation, camera_matrix, image_size).to(device)
@@ -116,12 +121,18 @@ def render_meshes(meshes, camera_parameters, device):
             renderer = MeshRenderer(
                 rasterizer=MeshRasterizer(cameras=camera, raster_settings=raster_settings),
                 shader=HardPhongShader(device=device, cameras=camera)
-            )
+            ).eval()
+
             rendered_image = renderer.forward(mesh)
+            mask = 1 - (rendered_image[:, :, :, 3] == 0).float().to(device)
+            mask = mask.repeat(3, 1, 1)
             rendered_image = process_rendered_image(rendered_image)
+            rendered_image = transformation(rendered_image)
+            masks.append(transform_mask(mask))
             rendered_images.append(transformation(rendered_image))
 
     rendered_images = torch.stack(rendered_images).squeeze(1)
+    masks = torch.stack(masks).squeeze(1)
 
-    return rendered_images
+    return rendered_images, masks
 

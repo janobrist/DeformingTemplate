@@ -7,6 +7,8 @@ import numpy as np
 import trimesh
 from pytorch3d.io import load_objs_as_meshes
 from pytorch3d.structures import Meshes
+from pytorch3d.renderer.mesh.textures import TexturesUV
+import time
 
 class Dataset_mesh(Dataset):
     def __init__(self, data_root):
@@ -64,6 +66,7 @@ class DatasetMeshWithImages(Dataset):
         self.src_root = f"{root_dir}/template_mesh"
         self.image_root = f"{root_dir}/images"
         self.calib_root = f"{root_dir}/calibration"
+        self.name = os.path.basename(root_dir)
         self.camera_names = [name for name in sorted(os.listdir(self.image_root))]
         self.frames = []
         self.device = device
@@ -84,18 +87,20 @@ class DatasetMeshWithImages(Dataset):
         return len(self.frames)
 
     def __getitem__(self, idx):
-        # get deformed meshes
         frame = self.frames[idx]
-        mesh_trg_Path = os.path.join(self.trg_root, f"mesh-f{frame}.obj")
-        target_mesh = load_objs_as_meshes([mesh_trg_Path], device=self.device)
+        # get deformed meshes
+        target_mesh_path = os.path.join(self.trg_root, f"mesh-f{frame}.obj")
+        target_mesh_vertices, target_mesh_faces, _, _ = self.load_mesh(target_mesh_path)
+        target_mesh = Meshes(verts=[target_mesh_vertices], faces=[target_mesh_faces]).to(self.device)
+
 
         # get template mesh
-        mesh_src_Path = os.path.join(self.src_root, "mesh-f00001.obj")
-        template_mesh = load_objs_as_meshes([mesh_src_Path], device=self.device)
+        template_mesh_path = os.path.join(self.src_root, "mesh-f00001.obj")
+        template_mesh_vertices, template_mesh_faces, center, scale = self.load_mesh(template_mesh_path)
+        template_tex_tensor = torch.load(os.path.join(self.src_root, "textures.pth"))
+        template_mesh_textures = TexturesUV(maps=template_tex_tensor['maps'], verts_uvs=template_tex_tensor['verts_uvs'], faces_uvs=template_tex_tensor['faces_uvs'])
 
-        # transform meshes
-        target_mesh, _, _ = self.transform_meshes(target_mesh)
-        template_mesh, scales, centers = self.transform_meshes(template_mesh)
+        template_mesh = Meshes(verts=[template_mesh_vertices], faces=[template_mesh_faces], textures=template_mesh_textures).to(self.device)
 
         # load images
         images = self.load_images(frame)
@@ -103,17 +108,29 @@ class DatasetMeshWithImages(Dataset):
         # get camera parameters
         camera_parameters = self.get_camera_parameters()
 
+
         return {'target_mesh': target_mesh,
                 'template_mesh': template_mesh,
                 "images": images,
                 "camera_parameters": camera_parameters,
                 'frame': self.frames[idx],
-                'centers': centers,
-                'scales': scales}
+                'centers': center,
+                'scales': scale,
+                "name": self.name}
 
     def load_mesh(self, path):
+        # load
         mesh = trimesh.load(path)
-        return mesh.vertices, mesh.faces
+        verts = torch.tensor(mesh.vertices, dtype=torch.float32)
+        faces = torch.tensor(mesh.faces, dtype=torch.float32)
+
+        # transform
+        center = verts.mean(0)
+        verts = verts - center
+        scale = torch.sqrt((verts ** 2).sum(1)).max()
+        verts = verts / scale
+
+        return verts, faces, center, scale
 
     def load_images(self, frame):
         images = []
@@ -124,7 +141,6 @@ class DatasetMeshWithImages(Dataset):
             images.append(image)
 
         return images
-
 
     def get_camera_parameters(self):
         rgb_cameras = dict(np.load(f'{self.calib_root}/cameras/rgb_cameras.npz'))
@@ -169,8 +185,8 @@ def collate_fn(data, device):
     """
     # initialize tensors
     maxPoints = 9000#16000
-    features_verts_src = torch.zeros((len(data), maxPoints, 3)).to(device)
-    images = torch.zeros((len(data)*len(data[0]['images']), 3, 224, 224)).to(device)
+    features_verts_src = torch.zeros((len(data), maxPoints, 3), dtype=torch.float32).to(device)
+    images = torch.zeros((len(data)*len(data[0]['images']), 3, 224, 224), dtype=torch.float32).to(device)
     num_vertices_src = []
     num_faces_src = []
     # adjust size of tensors
@@ -202,84 +218,9 @@ def collate_fn(data, device):
     camera_parameters = [item['camera_parameters'] for item in data]
     centers = [item['centers'] for item in data]
     scales = [item['scales'] for item in data]
+    names = [item['name'] for item in data]
 
-    return target_meshes, features_verts_src, template_faces, textures, images, camera_parameters, centers, scales, frame, num_vertices_src, num_faces_src
+    return target_meshes, features_verts_src, template_faces, textures, images, camera_parameters, centers, scales, frame, num_vertices_src, names
 
 
-def collate_fn_nofor(data, device):
-    """
-       data: is a list of tuples with (example, label, length)
-             where 'example' is a tensor of arbitrary shape
-             and label/length are scalars
-    """
-    #print('data[0]: ', data[0])
-    #device='cuda:0'
-    maxPoints = 9000#9000
-    maxFaces = 17000#17000
-    #_, labels, lengths = zip(*data)
-    #max_len = max(lengths)
-    #n_ftrs = data[0][0].size(1)
-    features_verts_trg = torch.zeros((len(data), maxPoints, 3))
-    features_faces_trg = torch.zeros((len(data), maxFaces, 3))
-    features_verts_src = torch.zeros((len(data), maxPoints, 3))
-    features_faces_src = torch.zeros((len(data), maxFaces, 3))
 
-    orig_verts_trg = []
-    orig_verts_src = []
-    orig_faces_trg = []
-    orig_faces_src = []
-    #labels = torch.tensor(labels)
-    #lengths = torch.tensor(lengths)
-    #print('len: ', len(data))
-    for i in range(len(data)):
-        num_points = data[i]['num_points']
-        num_faces = data[i]['num_faces']
-        
-        verts_trg = data[i]['vertices_trg'].to(device)
-        #print('verts_trg shape: ', verts_trg.shape)
-        faces_trg = data[i]['faces_trg'].to(device)
-        
-        #print('faces trg shape: ', faces_trg.shape)
-        #print('vertices trg shape: ', verts_trg.shape)
-        features_verts_trg[i] = torch.cat((verts_trg, torch.zeros((maxPoints - num_points, 3)).to(device)), dim=0)
-        features_faces_trg[i] = torch.cat((faces_trg, torch.zeros((maxFaces - num_faces, 3)).to(device)), dim=0)
-
-        
-        verts_src = data[i]['vertices_src'].to(device)
-        faces_src = data[i]['faces_src'].to(device)
-        #print('faces src shape: ', faces_src.shape)
-        #num_points = data[i]['num_points']
-        #num_faces = data[i]['num_faces']
-        features_verts_src[i] = torch.cat((verts_src, torch.zeros((maxPoints - num_points, 3)).to(device)), dim=0)
-        features_faces_src[i] = torch.cat((faces_src, torch.zeros((maxFaces - num_faces, 3)).to(device)), dim=0)
-
-        orig_verts_src.append(verts_src)
-        orig_verts_trg.append(verts_trg)
-        orig_faces_src.append(faces_src)
-        orig_faces_trg.append(faces_trg)
-
-        #print('features shape: ', features_verts_src[i].shape)
-        #print('faces: ', data[i]['faces_src'].shape)
-    
-    #print('features shape: ', features_verts_src.shape)
-
-    verts_trg = features_verts_trg
-    faces_trg = features_faces_trg
-
-    #print('faces src 0: ', faces_src[0])
-    #print('faces trg 0: ', faces_trg[0])
-
-    verts_src = features_verts_src
-    faces_src = features_faces_src
-
-    #faces = torch.cat([el['faces'].unsqueeze(0) for el in data], dim=0)
-    name = [el['name'] for el in data]
-    centers = torch.cat([el['center_obj'].unsqueeze(0) for el in data], dim=0)
-    scale_obj = [el['scale_obj'] for el in data]
-    centers_src = torch.cat([el['center_src'].unsqueeze(0) for el in data], dim=0)
-    scale_src = [el['scale_src'] for el in data]
-    num_points = [el['num_points'] for el in data]
-    num_faces = [el['num_faces'] for el in data]
-    
-    
-    return orig_verts_trg, orig_faces_trg, orig_verts_src, orig_faces_src, {'vertices_trg': verts_trg, 'faces_trg': faces_trg, 'vertices_src': verts_src, 'faces_src': faces_src, 'name': name, 'center_obj':centers, 'scale_obj':scale_obj, 'num_points':num_points, 'num_faces':num_faces, 'center_src':centers_src, 'scale_src':scale_src}
