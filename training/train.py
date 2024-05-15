@@ -5,7 +5,7 @@ import torch
 from pytorch3d.structures import Meshes
 from pytorch3d.ops import sample_points_from_meshes
 from models.nvp_cadex import NVP_v2_5_frame
-from utils.images import show_image, inverse_normalize, mesh_plotly
+from utils.visualization import show_image, inverse_normalize, mesh_plotly
 from models.perceptual_loss import PerceptualLoss, MaskedPerceptualLoss
 from pytorch3d.loss import (
     chamfer_distance,
@@ -40,7 +40,7 @@ class Training:
         self.optimizer = optim.Adam(self.decoder.parameters(), lr=params['lr'], weight_decay=params['weight_decay'])
         self.scheduler = CosineAnnealingLR(self.optimizer, T_max=10000, eta_min=1e-7)
         self.chamfer_weight_mesh = params['chamfer_weight']
-        self.roi_weight = params['chamfer_weight']/2
+        self.roi_weight = params['chamfer_weight']/4
         self.render_weight = params['render_weight']
         self.log = params['log']
 
@@ -106,22 +106,36 @@ class Training:
 
         return train_dataloader, valid_dataloader
 
-    def get_roi_meshes(self, meshes, target_position, threshold):
-        selected_vertices, selected_faces = [], []
+    def get_roi_meshes(self, meshes, target_position, rotation_matrices, distance_threshold, cosine_threshold):
         face_indices_array = []
+        cosine_threshold = torch.tensor(cosine_threshold)
         for i, mesh in enumerate(meshes):
             pos = target_position[i].unsqueeze(0).to(self.device)
             distances_squared = torch.sum((mesh.verts_packed() - pos) ** 2, dim=1)
 
             # get vertices
-            close_vertices_mask = distances_squared < threshold ** 2
-            selected_vertices.append(mesh.verts_packed()[close_vertices_mask])
-            indices = close_vertices_mask.nonzero(as_tuple=True)[0]
+            vertices_mask = distances_squared < distance_threshold ** 2
+            verts = mesh.verts_packed()[vertices_mask]
+            vertices_indices = vertices_mask.nonzero(as_tuple=True)[0]
+
+            # get directions
+            directions = - (verts - pos)
+            directions /= directions.norm(p=2, dim=1, keepdim=True)
+
+            # filter for directions
+            target_direction = rotation_matrices[i][:, 0].to(self.device)  # Adjust the index based on actual target
+            dot_products = torch.matmul(directions, target_direction)
+            angle_threshold = torch.cos(torch.deg2rad(torch.tensor(cosine_threshold)))
+            similar_vectors = dot_products > angle_threshold
+
+            directions_mask = similar_vectors.nonzero(as_tuple=True)[0]
+
+            vertices_indices = vertices_indices[directions_mask]
 
             # get faces
             faces = mesh.faces_packed()
             faces_mask = torch.zeros(faces.shape[0], dtype=torch.bool, device=self.device)
-            for index in indices:
+            for index in vertices_indices:
                 faces_mask |= (faces == index).any(dim=1)
 
             face_indices = faces_mask.nonzero(as_tuple=True)[0]
@@ -164,9 +178,11 @@ class Training:
             # roi loss
             numberOfSampledPoints = 500
             ee_pos = [data_item['ee_pos'] for data_item in robot_data]
-            target_roi_meshes = self.get_roi_meshes(target_meshes, ee_pos,0.2)
+            ee_ori = [torch.tensor(np.array(data_item['T_ME'])[:3, :3]) for data_item in robot_data]
+            rotation_matrices = torch.stack(ee_ori)
+            target_roi_meshes = self.get_roi_meshes(target_meshes, ee_pos, rotation_matrices, 0.3, 60)
             try:
-                template_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos,0.2)
+                template_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos, rotation_matrices, 0.3, 60)
                 target_roi_sampled = sample_points_from_meshes(target_roi_meshes, numberOfSampledPoints).to(self.device)
                 template_roi_sampled = sample_points_from_meshes(template_roi_meshes, numberOfSampledPoints).to(self.device)
                 chamfer_loss_roi, _ = chamfer_distance(target_roi_sampled, template_roi_sampled)
@@ -354,11 +370,11 @@ class Training:
 def main(log):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     data_path = 'data'
-    epochs = 15
+    epochs = 40
     epoch_start = 0
     batch_size = 4
-    lr = 5e-5
-    weight_decay = 5e-7
+    lr = 1e-4
+    weight_decay = 5e-6
     chamfer_weight = 1
     render_weight = 1
     paramters = {"lr": lr, "weight_decay": weight_decay, "chamfer_weight": chamfer_weight, "render_weight": render_weight, "log": log}

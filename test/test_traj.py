@@ -71,6 +71,8 @@ def visualize(verts, faces, ee_pos):
 
     return fig
 
+
+
 if __name__ == '__main__':
     mesh_path = "../data/Couch_T1/triangle_meshes/mesh-f00166.obj"
     robot_data_path = "../data/Couch_T1/robot_data.json"
