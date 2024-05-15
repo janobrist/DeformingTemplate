@@ -12,7 +12,7 @@ from pytorch3d.loss import (
 )
 from pytorch3d.io import save_obj
 from datasets.dataset_meshes import DatasetMeshWithImages, collate_fn
-from render import render_meshes
+from training.render import render_meshes
 from torch.utils.data import DataLoader, ConcatDataset, random_split
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -353,7 +353,7 @@ class Training:
 
 def main(log):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    data_path = '../data'
+    data_path = 'data'
     epochs = 15
     epoch_start = 0
     batch_size = 4
