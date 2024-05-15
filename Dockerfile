@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y wget && \
 ENV PATH="/opt/conda/bin:$PATH"
 
 # Copy the current directory contents into the container at /usr/src/app
-COPY . /usr/src/app
+#COPY . /usr/src/app
 
 # Install any needed packages specified in environment.yml
 RUN conda env create -f environment.yml
@@ -32,4 +32,4 @@ EXPOSE 80
 ENV NAME World
 
 # Run app.py when the container launches
-CMD ["conda", "run", "--no-capture-output", "-n", "test3", "python", "main.py"]
+#CMD ["conda", "run", "--no-capture-output", "-n", "test3", "python", "main.py"]
