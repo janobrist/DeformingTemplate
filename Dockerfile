@@ -1,6 +1,6 @@
 # Use an NVIDIA CUDA with Ubuntu 22.04 as a parent image
 FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
-
+RUN apt-get update && apt-get install -y vimq
 # Set the working directory in the container
 WORKDIR /usr/src/app
 
@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y wget && \
 ENV PATH="/opt/conda/bin:$PATH"
 
 # Copy the current directory contents into the container at /usr/src/app
-#COPY . /usr/src/app
+COPY environment.yml /usr/src/app
 
 # Install any needed packages specified in environment.yml
 RUN conda env create -f environment.yml

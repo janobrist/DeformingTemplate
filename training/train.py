@@ -7,6 +7,7 @@ from pytorch3d.ops import sample_points_from_meshes
 from models.nvp_cadex import NVP_v2_5_frame
 from utils.visualization import show_image, inverse_normalize, mesh_plotly
 from models.perceptual_loss import PerceptualLoss, MaskedPerceptualLoss
+from models.feature_extraction import ForceFeatures
 from pytorch3d.loss import (
     chamfer_distance,
 )
@@ -32,17 +33,23 @@ def print_memory_usage(local_vars):
 
 
 class Training:
-    def __init__(self, device, params):
+    def __init__(self, device, args):
         self.device = device
+
+        # models
         self.decoder = self.get_homeomorphism_model().to(self.device)
         self.image_encoder = vgg19(weights=VGG19_Weights.DEFAULT).eval().to(self.device)
         self.perceptual_loss = MaskedPerceptualLoss().to(self.device)
-        self.optimizer = optim.Adam(self.decoder.parameters(), lr=params['lr'], weight_decay=params['weight_decay'])
+        self.force_encoder = ForceFeatures().to(self.device)
+
+        # optimizer and weights
+        params = list(self.force_encoder.parameters()) + list(self.decoder.parameters())
+        self.optimizer = optim.Adam(params, lr=args['lr'], weight_decay=args['weight_decay'])
         self.scheduler = CosineAnnealingLR(self.optimizer, T_max=10000, eta_min=1e-7)
-        self.chamfer_weight_mesh = params['chamfer_weight']
-        self.roi_weight = params['chamfer_weight']/4
-        self.render_weight = params['render_weight']
-        self.log = params['log']
+        self.chamfer_weight_mesh = args['chamfer_weight']
+        self.roi_weight = args['chamfer_weight']/4
+        self.render_weight = args['render_weight']
+        self.log = args['log']
 
 
     def print_memory_usage_class(self):
@@ -73,7 +80,7 @@ class Training:
 
         c_dim = 128
         hidden_dim = 128
-        homeomorphism_decoder = NVP_v2_5_frame(n_layers=n_layers, feature_dims=4000,
+        homeomorphism_decoder = NVP_v2_5_frame(n_layers=n_layers, feature_dims=4064,
                                                hidden_size=hidden_size,
                                                proj_dims=proj_dims, code_proj_hidden_size=code_proj_hidden_size,
                                                proj_type=proj_type,
@@ -154,10 +161,17 @@ class Training:
             target_meshes, template_vertices, template_faces, template_textures, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
             batch_size = len(frames)
 
-
             # get features from images
             image_features = self.image_encoder.forward(images)
             reshaped_features = image_features.view(batch_size, 4000)
+
+            # get force features
+            forces = torch.stack([torch.tensor(data_item['forces']) for data_item in robot_data])
+            ee_position = torch.stack([torch.tensor(data_item['ee_pos']) for data_item in robot_data])
+            forces_input = torch.cat((forces, ee_position), dim=1).to(self.device).float()
+            force_features = self.force_encoder(forces_input)
+
+            reshaped_features = torch.cat((reshaped_features, force_features), dim=1)
 
             # predict deformation
             coordinates = self.decoder.forward(reshaped_features, template_vertices)
@@ -367,17 +381,18 @@ class Training:
                     save_obj(filename, predicted_mesh_vertices[j], faces=template_faces[j])
 
 
-def main(log):
+def training_main(args):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     data_path = 'data'
-    epochs = 40
+    epochs = args.epochs
     epoch_start = 0
     batch_size = 4
-    lr = 1e-4
+    lr = args.lr
     weight_decay = 5e-6
     chamfer_weight = 1
     render_weight = 1
-    paramters = {"lr": lr, "weight_decay": weight_decay, "chamfer_weight": chamfer_weight, "render_weight": render_weight, "log": log}
+    log = args.log
+    parameters = {"lr": lr, "weight_decay": weight_decay, "chamfer_weight": chamfer_weight, "render_weight": render_weight, "log": log}
 
     if log:
         wandb.init(
@@ -397,7 +412,7 @@ def main(log):
             }
         )
 
-    session = Training(device, paramters)
+    session = Training(device, parameters)
     # get data
     train_loader, valid_loader = session.load_data(data_path, batch_size)
     print(len(train_loader), len(valid_loader))
@@ -413,7 +428,3 @@ def main(log):
 
     session.save_meshes(train_loader, valid_loader, data_path)
 
-
-if __name__ == "__main__":
-    log = True
-    main(log)

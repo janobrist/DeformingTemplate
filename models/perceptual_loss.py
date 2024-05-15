@@ -1,6 +1,7 @@
 import torch
 from torchvision.models import vgg19, VGG19_Weights
 import torch.nn.functional as F
+from torch import nn
 class PerceptualLoss(torch.nn.Module):
     def __init__(self):
         super(PerceptualLoss, self).__init__()
@@ -37,3 +38,16 @@ class MaskedPerceptualLoss(torch.nn.Module):
         target_features = self.features(target_masked)
         # Calculate L1 Loss between the features of the masked regions
         return F.l1_loss(pred_features, target_features)
+
+class ForceFeatures(nn.Module):
+    def __init__(self):
+        super(ForceFeatures, self).__init__()
+        # Define a linear layer that maps 6 input features to 64 output features
+        self.expand_features = nn.Linear(6, 64)
+
+    def forward(self, x):
+        # Apply the linear transformation
+        x = self.expand_features(x)
+        # Optionally, apply an activation function like ReLU to introduce non-linearity
+        x = torch.relu(x)
+        return x
