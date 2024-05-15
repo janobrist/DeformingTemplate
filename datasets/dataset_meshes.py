@@ -9,6 +9,7 @@ from pytorch3d.io import load_objs_as_meshes
 from pytorch3d.structures import Meshes
 from pytorch3d.renderer.mesh.textures import TexturesUV
 import time
+import json
 
 class Dataset_mesh(Dataset):
     def __init__(self, data_root):
@@ -77,10 +78,19 @@ class DatasetMeshWithImages(Dataset):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
             # Normalize with ImageNet's mean and std
         ])
-
         for mesh_file in sorted(os.listdir(self.trg_root)):
             if mesh_file.endswith('.obj'):
                 self.frames.append(mesh_file[-9:-4])
+
+        self.robot_data = []
+        # robot_data
+        with open(os.path.join(root_dir, "robot_data.json"), 'r') as f:
+            data = json.load(f)
+
+        for frame in self.frames:
+            for item in data['data']:
+                if int(item['frame']) == int(frame):
+                    self.robot_data.append(item)
 
 
     def __len__(self):
@@ -90,13 +100,13 @@ class DatasetMeshWithImages(Dataset):
         frame = self.frames[idx]
         # get deformed meshes
         target_mesh_path = os.path.join(self.trg_root, f"mesh-f{frame}.obj")
-        target_mesh_vertices, target_mesh_faces, _, _ = self.load_mesh(target_mesh_path)
+        target_mesh_vertices, target_mesh_faces, center_target, scale_target = self.load_mesh(target_mesh_path)
         target_mesh = Meshes(verts=[target_mesh_vertices], faces=[target_mesh_faces]).to(self.device)
 
 
         # get template mesh
         template_mesh_path = os.path.join(self.src_root, "mesh-f00001.obj")
-        template_mesh_vertices, template_mesh_faces, center, scale = self.load_mesh(template_mesh_path)
+        template_mesh_vertices, template_mesh_faces, center_template, scale_template = self.load_mesh(template_mesh_path)
         template_tex_tensor = torch.load(os.path.join(self.src_root, "textures.pth"))
         template_mesh_textures = TexturesUV(maps=template_tex_tensor['maps'], verts_uvs=template_tex_tensor['verts_uvs'], faces_uvs=template_tex_tensor['faces_uvs'])
 
@@ -104,6 +114,13 @@ class DatasetMeshWithImages(Dataset):
 
         # load images
         images = self.load_images(frame)
+
+
+        # transform ee pos in robot data
+        robot_data = self.robot_data[idx]
+        ee_pos = torch.tensor(1000*np.array(robot_data['T_ME'])[:3, 3])
+        ee_pos = (ee_pos - center_target)/scale_target
+        robot_data['ee_pos'] = ee_pos
 
         # get camera parameters
         camera_parameters = self.get_camera_parameters()
@@ -113,9 +130,10 @@ class DatasetMeshWithImages(Dataset):
                 'template_mesh': template_mesh,
                 "images": images,
                 "camera_parameters": camera_parameters,
+                "robot_data": robot_data,
                 'frame': self.frames[idx],
-                'centers': center,
-                'scales': scale,
+                'centers': center_template,
+                'scales': scale_template,
                 "name": self.name}
 
     def load_mesh(self, path):
@@ -219,8 +237,9 @@ def collate_fn(data, device):
     centers = [item['centers'] for item in data]
     scales = [item['scales'] for item in data]
     names = [item['name'] for item in data]
+    robot_data = [item['robot_data'] for item in data]
 
-    return target_meshes, features_verts_src, template_faces, textures, images, camera_parameters, centers, scales, frame, num_vertices_src, names
+    return target_meshes, features_verts_src, template_faces, textures, images, camera_parameters, centers, scales, frame, num_vertices_src, names, robot_data
 
 
 

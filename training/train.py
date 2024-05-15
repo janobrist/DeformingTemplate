@@ -1,4 +1,6 @@
 import os
+
+import numpy as np
 import torch
 from pytorch3d.structures import Meshes
 from pytorch3d.ops import sample_points_from_meshes
@@ -18,9 +20,8 @@ from torchvision.models import vgg19, VGG19_Weights
 import sys
 from pympler import asizeof
 import wandb
+import torch.nn.functional as F
 import time
-import matplotlib.pyplot as plt
-from torchvision.transforms.functional import to_pil_image
 
 
 
@@ -38,7 +39,8 @@ class Training:
         self.perceptual_loss = MaskedPerceptualLoss().to(self.device)
         self.optimizer = optim.Adam(self.decoder.parameters(), lr=params['lr'], weight_decay=params['weight_decay'])
         self.scheduler = CosineAnnealingLR(self.optimizer, T_max=10000, eta_min=1e-7)
-        self.chamfer_weight = params['chamfer_weight']
+        self.chamfer_weight_mesh = params['chamfer_weight']
+        self.roi_weight = params['chamfer_weight']/2
         self.render_weight = params['render_weight']
         self.log = params['log']
 
@@ -46,6 +48,16 @@ class Training:
     def print_memory_usage_class(self):
         for attr, value in self.__dict__.items():
             print(f'{attr} uses {asizeof.asizeof(value)} bytes (deep size)')
+
+    def cosine_similarity_loss(self, pred_normals, gt_normals):
+        # normalize vectors
+        pred_normals = F.normalize(pred_normals, p=2, dim=-1)  # Normalize along the last dimension
+        gt_normals = F.normalize(gt_normals, p=2, dim=-1)
+
+        # Compute cosine similarity between corresponding normals
+        cosine_loss = 1 - (pred_normals * gt_normals).sum(dim=-1).mean()
+
+        return cosine_loss
 
     def get_homeomorphism_model(self):
         n_layers = 6
@@ -83,23 +95,51 @@ class Training:
         train_size = total_size - valid_size  # Rest will be for training
         train_dataset, valid_dataset = random_split(combined_dataset, [train_size, valid_size])
 
-        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
-                                      collate_fn=lambda b, device=self.device: collate_fn(b, device), drop_last=True)
-        valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True,
-                                      collate_fn=lambda b, device=self.device: collate_fn(b, device), drop_last=True)
+        # train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
+        #                               collate_fn=lambda b, device=self.device: collate_fn(b, device), drop_last=True)
+        # valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True,
+        #                               collate_fn=lambda b, device=self.device: collate_fn(b, device), drop_last=True)
+
+        train_dataloader = DataLoader(combined_dataset, batch_size=batch_size, shuffle=True,
+                                   collate_fn=lambda b, device=self.device: collate_fn(b, device), drop_last=True)
+        valid_dataloader = []
 
         return train_dataloader, valid_dataloader
 
-    def train_epoch(self, dataloader):
+    def get_roi_meshes(self, meshes, target_position, threshold):
+        selected_vertices, selected_faces = [], []
+        face_indices_array = []
+        for i, mesh in enumerate(meshes):
+            pos = target_position[i].unsqueeze(0).to(self.device)
+            distances_squared = torch.sum((mesh.verts_packed() - pos) ** 2, dim=1)
+
+            # get vertices
+            close_vertices_mask = distances_squared < threshold ** 2
+            selected_vertices.append(mesh.verts_packed()[close_vertices_mask])
+            indices = close_vertices_mask.nonzero(as_tuple=True)[0]
+
+            # get faces
+            faces = mesh.faces_packed()
+            faces_mask = torch.zeros(faces.shape[0], dtype=torch.bool, device=self.device)
+            for index in indices:
+                faces_mask |= (faces == index).any(dim=1)
+
+            face_indices = faces_mask.nonzero(as_tuple=True)[0]
+            face_indices_array.append([face_indices])
+
+        selected_meshes = meshes.submeshes(face_indices_array)
+
+        return selected_meshes
+
+    def train_epoch(self, dataloader, epoch):
         self.decoder.train()
-        total_chamfer_loss, total_render_loss, total_loss_epoch = 0, 0, 0
-        time1 = time.time()
+        total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch = 0, 0, 0, 0
         for i, item in enumerate(dataloader):
             self.optimizer.zero_grad()
             # get data
-            target_meshes, template_vertices, template_faces, template_textures, images, camera_parameters, centers, scales, frames, num_points, names = item
-            print(i)
+            target_meshes, template_vertices, template_faces, template_textures, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
             batch_size = len(frames)
+
 
             # get features from images
             image_features = self.image_encoder.forward(images)
@@ -111,54 +151,82 @@ class Training:
 
             # create new source mesh
             predicted_mesh_vertices = [coordinates[s][:num_points[s]] for s in range(batch_size)]
-            predicted_meshes = Meshes(verts=predicted_mesh_vertices, faces=template_faces, textures=template_textures)
+            predicted_meshes = Meshes(verts=predicted_mesh_vertices, faces=template_faces)
 
-            # sample points from meshes
-            numberOfSampledPoints = 5000
+
 
             # sample meshes
+            numberOfSampledPoints = 5000
             predicted_sampled = sample_points_from_meshes(predicted_meshes, numberOfSampledPoints).to(self.device)
             target_sampled = sample_points_from_meshes(target_meshes, numberOfSampledPoints).to(self.device)
-            chamfer_loss, _ = chamfer_distance(target_sampled, predicted_sampled)
+            chamfer_loss_mesh, _ = chamfer_distance(target_sampled, predicted_sampled)
 
-            # transform mesh back for rendering
-            transformed_mesh = self.transform_meshes(predicted_meshes, centers, scales)
+            # roi loss
+            numberOfSampledPoints = 500
+            ee_pos = [data_item['ee_pos'] for data_item in robot_data]
+            target_roi_meshes = self.get_roi_meshes(target_meshes, ee_pos,0.2)
+            try:
+                template_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos,0.2)
+                target_roi_sampled = sample_points_from_meshes(target_roi_meshes, numberOfSampledPoints).to(self.device)
+                template_roi_sampled = sample_points_from_meshes(template_roi_meshes, numberOfSampledPoints).to(self.device)
+                chamfer_loss_roi, _ = chamfer_distance(target_roi_sampled, template_roi_sampled)
+            except ValueError:
+                chamfer_loss_roi = torch.tensor(0.5, device=self.device)
 
-            # render images from predicted mesh
-            rendered_images, masks = render_meshes(transformed_mesh, camera_parameters, self.device)
-            rendered_images = rendered_images.detach()
-            masks = masks.detach()
 
-            # get render loss
-            render_loss = self.perceptual_loss(rendered_images, images, masks)
+            # # render images from predicted mesh
+            # transformed_mesh = self.transform_meshes(predicted_meshes, centers, scales)
+            # rendered_images, masks = render_meshes(transformed_mesh, camera_parameters, self.device)
+            # rendered_images = rendered_images.detach()
+            # masks = masks.detach()
+            #
+            # # get render loss
+            # render_loss = self.perceptual_loss(rendered_images, images, masks)
 
-            print(chamfer_loss, render_loss)
+            total_loss = chamfer_loss_mesh * self.chamfer_weight_mesh + chamfer_loss_roi*self.roi_weight
 
-            total_loss = chamfer_loss * self.chamfer_weight + render_loss * self.render_weight
+            print("Training batch ", i, "Chamfer loss: ", chamfer_loss_mesh.item(), "ROI loss: ", chamfer_loss_roi.item(), "Total loss: ", total_loss.item())
 
             total_loss.backward()
 
-            total_chamfer_loss += chamfer_loss
-            total_render_loss += render_loss
+            total_chamfer_loss += chamfer_loss_mesh
+            total_roi_loss += chamfer_loss_roi
+            #total_render_loss += render_loss
             total_loss_epoch += total_loss
             self.optimizer.step()
             self.scheduler.step()
             if i%10 == 0 and i > 0:
                 if self.log:
-                    wandb.log({"chamfer_loss_training": total_chamfer_loss/10, "render_loss_training": total_render_loss/10, "total_loss_training": total_loss/10})
-                    total_chamfer_loss, total_render_loss, total_loss_epoch = 0, 0, 0
+                    wandb.log({"chamfer_loss_training": total_chamfer_loss/10, "roi_loss_training": total_roi_loss/10, "total_loss_training": total_loss/10})
+                    total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch = 0, 0, 0, 0
 
-        print("Time training epoch: ", time.time() - time1)
+            if self.log:
+                for k in range(4):
+                    if names[k] == 'Couch_T1' and int(frames[k]) == 166:
+                        pred = mesh_plotly(predicted_meshes[k], template_roi_meshes[k], ["Predicted", "ROI"], ee_pos[k])
+                        gt = mesh_plotly(target_meshes[k], target_roi_meshes[k], ["Target", "ROI"], ee_pos[k])
+                        comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"], ee_pos[k])
+                        wandb.log({f"predicted_mesh0": wandb.Plotly(pred)})
+                        wandb.log({f"target_mesh0": wandb.Plotly(gt)})
+                        wandb.log({f"comparison0": wandb.Plotly(comparison)})
+
+                    if names[k] == 'Couch_T3' and int(frames[k]) == 60:
+                        pred = mesh_plotly(predicted_meshes[k], template_roi_meshes[k], ["Predicted", "ROI"], ee_pos[k])
+                        gt = mesh_plotly(target_meshes[k], target_roi_meshes[k], ["Target", "ROI"], ee_pos[k])
+                        comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"], ee_pos[k])
+                        wandb.log({f"predicted_mesh1": wandb.Plotly(pred)})
+                        wandb.log({f"target_mesh1": wandb.Plotly(gt)})
+                        wandb.log({f"comparison1": wandb.Plotly(comparison)})
+
 
     def validate(self, dataloader):
         self.decoder.eval()
-        total_chamfer_loss, total_render_loss, total_loss_epoch = 0, 0, 0
-        time1 = time.time()
+        total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch = 0, 0, 0, 0
         with torch.no_grad():
             for i, item in enumerate(dataloader):
                 # get data
-                print(i)
-                target_meshes, template_vertices, template_faces, template_textures, images, camera_parameters, centers, scales, frames, num_points, names = item
+                target_meshes, template_vertices, template_faces, template_textures, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
+                print("Validation batch: ", i)
                 batch_size = len(frames)
 
                 # get features from images
@@ -171,44 +239,52 @@ class Training:
 
                 # create new source mesh
                 predicted_mesh_vertices = [coordinates[s][:num_points[s]] for s in range(batch_size)]
-                predicted_meshes = Meshes(verts=predicted_mesh_vertices, faces=template_faces, textures=template_textures)
-
-
-                # sample points from meshes
-                numberOfSampledPoints = 5000
+                predicted_meshes = Meshes(verts=predicted_mesh_vertices, faces=template_faces)
 
                 # sample meshes
+                numberOfSampledPoints = 5000
                 predicted_sampled = sample_points_from_meshes(predicted_meshes, numberOfSampledPoints).to(self.device)
                 target_sampled = sample_points_from_meshes(target_meshes, numberOfSampledPoints).to(self.device)
-                chamfer_loss, _ = chamfer_distance(target_sampled, predicted_sampled)
+                chamfer_loss_mesh, _ = chamfer_distance(target_sampled, predicted_sampled)
 
-                # transform mesh back for rendering
-                transformed_mesh = self.transform_meshes(predicted_meshes, centers, scales)
+                # roi loss
+                numberOfSampledPoints = 500
+                ee_pos = [data_item['ee_pos'] for data_item in robot_data]
+                target_roi_meshes = self.get_roi_meshes(target_meshes, ee_pos, 0.2)
+                template_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos, 0.2)
+                target_roi_sampled = sample_points_from_meshes(target_roi_meshes, numberOfSampledPoints).to(self.device)
+                template_roi_sampled = sample_points_from_meshes(template_roi_meshes, numberOfSampledPoints).to(
+                    self.device)
+                chamfer_loss_roi, _ = chamfer_distance(target_roi_sampled, template_roi_sampled)
 
-                # render images from predicted mesh
-                rendered_images, masks = render_meshes(transformed_mesh, camera_parameters, self.device)
-                rendered_images = rendered_images.detach()
-                masks = masks.detach()
+                # # render images from predicted mesh
+                # transformed_mesh = self.transform_meshes(predicted_meshes, centers, scales)
+                # rendered_images, masks = render_meshes(transformed_mesh, camera_parameters, self.device)
+                # rendered_images = rendered_images.detach()
+                # masks = masks.detach()
+                #
+                # # get render loss
+                # render_loss = self.perceptual_loss(rendered_images, images, masks)
 
-                # get render loss
-                render_loss = self.perceptual_loss(rendered_images, images, masks)
 
-                total_chamfer_loss += chamfer_loss
-                total_render_loss += render_loss
+                total_chamfer_loss += chamfer_loss_mesh
+                total_roi_loss += chamfer_loss_roi
                 if i%10 == 0 and i > 0:
                     if self.log:
-                        wandb.log({"chamfer_loss_validation": total_chamfer_loss/10, "render_loss_validation": total_render_loss/10})
-                        total_chamfer_loss, total_render_loss, total_loss_epoch = 0, 0, 0
+                        wandb.log({"chamfer_loss_validation": total_chamfer_loss/10, "roi_loss_validation": total_roi_loss/10})
+                        total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch = 0, 0, 0, 0
 
                 # log meshes to wandb
-                if i == 0 and batch_size >= 2:
-                    for k in range(2):
-                        pred = mesh_plotly(predicted_mesh_vertices[k], template_vertices[k])
-                        gt = mesh_plotly(target_meshes[k].verts_packed(), target_meshes[k].faces_packed())
-                        wandb.log({f"predicted_mesh{k}": wandb.Plotly(pred)})
-                        wandb.log({f"target_mesh{k}": wandb.Plotly(gt)})
+                if self.log:
+                    if i == 0 and batch_size >= 2:
+                        for k in range(4):
+                            pred = mesh_plotly(predicted_meshes[k], template_roi_meshes[k], ["Predicted", "ROI"])
+                            gt = mesh_plotly(target_meshes[k], target_roi_meshes[k], ["Target", "ROI"])
+                            comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"])
+                            wandb.log({f"predicted_mesh{k}": wandb.Plotly(pred)})
+                            wandb.log({f"target_mesh{k}": wandb.Plotly(gt)})
+                            wandb.log({f"comparison{k}": wandb.Plotly(comparison)})
 
-        print("Time validation epoch: ", time.time() - time1)
 
     def transform_meshes(self, meshes, centers, scales):
         transformed_verts = []
@@ -230,7 +306,7 @@ class Training:
                 print(i)
 
                 # get data
-                target_meshes, template_vertices, template_faces, template_textures, images, camera_parameters, centers, scales, frames, num_points, names = item
+                target_meshes, template_vertices, template_faces, template_textures, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
                 batch_size = len(frames)
 
                 # get features from images
@@ -254,7 +330,7 @@ class Training:
                 print(i)
 
                 # get data
-                target_meshes, template_vertices, template_faces, template_textures, images, camera_parameters, centers, scales, frames, num_points, names = item
+                target_meshes, template_vertices, template_faces, template_textures, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
                 batch_size = len(frames)
 
                 # get features from images
@@ -278,14 +354,14 @@ class Training:
 def main(log):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     data_path = '../data'
-    epochs = 10
+    epochs = 15
     epoch_start = 0
     batch_size = 4
     lr = 5e-5
     weight_decay = 5e-7
-    chamfer_weigth = 10000
+    chamfer_weight = 1
     render_weight = 1
-    paramters = {"lr": lr, "weight_decay": weight_decay, "chamfer_weight": chamfer_weigth, "render_weight": render_weight, "log": log}
+    paramters = {"lr": lr, "weight_decay": weight_decay, "chamfer_weight": chamfer_weight, "render_weight": render_weight, "log": log}
 
     if log:
         wandb.init(
@@ -297,7 +373,7 @@ def main(log):
                 "learning_rate": lr,
                 "model": "homemoorphism, vgg19, 4 images",
                 "weight_decay": weight_decay,
-                "chamfer_weight": chamfer_weigth,
+                "chamfer_weight": chamfer_weight,
                 "render_weight": render_weight,
                 "batch_size": batch_size,
                 "dataset": "Couch_T1",
@@ -311,8 +387,13 @@ def main(log):
     print(len(train_loader), len(valid_loader))
 
     for epoch in range(epoch_start, epochs):
-        session.train_epoch(train_loader)
-        session.validate(valid_loader)
+        print("Epoch: ", epoch + 1)
+        session.train_epoch(train_loader, epoch+1)
+        if epoch == 5:
+            session.roi_weight *= 2
+        if epoch == 10:
+            session.roi_weight *= 2
+        #session.validate(valid_loader)
 
     session.save_meshes(train_loader, valid_loader, data_path)
 
