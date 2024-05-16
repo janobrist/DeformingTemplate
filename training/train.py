@@ -225,10 +225,10 @@ class Training:
             total_loss_epoch += total_loss
             self.optimizer.step()
             self.scheduler.step()
-            if i%10 == 0 and i > 0:
-                if self.log:
-                    wandb.log({"chamfer_loss_training": total_chamfer_loss/10, "roi_loss_training": total_roi_loss/10, "total_loss_training": total_loss/10})
-                    total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch = 0, 0, 0, 0
+            # if i%10 == 0 and i > 0:
+            #     if self.log:
+            #         wandb.log({"chamfer_loss_training": total_chamfer_loss/10, "roi_loss_training": total_roi_loss/10, "total_loss_training": total_loss/10})
+            #         total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch = 0, 0, 0, 0
 
             if self.log:
                 for k in range(4):
@@ -247,6 +247,10 @@ class Training:
                         wandb.log({f"predicted_mesh1": wandb.Plotly(pred)})
                         wandb.log({f"target_mesh1": wandb.Plotly(gt)})
                         wandb.log({f"comparison1": wandb.Plotly(comparison)})
+
+        if self.log:
+            wandb.log({"chamfer_loss_training": total_chamfer_loss, "roi_loss_training": total_roi_loss,
+                       "total_loss_training": total_loss_epoch})
 
 
     def validate(self, dataloader):
@@ -386,7 +390,7 @@ def training_main(args):
     data_path = 'data'
     epochs = args.epochs
     epoch_start = 0
-    batch_size = 4
+    batch_size = args.batch_size
     lr = args.lr
     weight_decay = 5e-6
     chamfer_weight = 1
@@ -420,9 +424,9 @@ def training_main(args):
     for epoch in range(epoch_start, epochs):
         print("Epoch: ", epoch + 1)
         session.train_epoch(train_loader, epoch+1)
-        if epoch == 5:
-            session.roi_weight *= 2
         if epoch == 10:
+            session.roi_weight *= 2
+        if epoch == 20:
             session.roi_weight *= 2
         #session.validate(valid_loader)
 
