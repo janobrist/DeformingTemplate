@@ -153,6 +153,7 @@ class Training:
         return selected_meshes
 
     def train_epoch(self, dataloader, epoch):
+        wandb_dict = {}
         self.decoder.train()
         total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch = 0, 0, 0, 0
         for i, item in enumerate(dataloader):
@@ -184,13 +185,13 @@ class Training:
 
 
             # sample meshes
-            numberOfSampledPoints = 5000
+            numberOfSampledPoints = 2500
             predicted_sampled = sample_points_from_meshes(predicted_meshes, numberOfSampledPoints).to(self.device)
             target_sampled = sample_points_from_meshes(target_meshes, numberOfSampledPoints).to(self.device)
             chamfer_loss_mesh, _ = chamfer_distance(target_sampled, predicted_sampled)
 
             # roi loss
-            numberOfSampledPoints = 500
+            numberOfSampledPoints = 250
             ee_pos = [data_item['ee_pos'] for data_item in robot_data]
             ee_ori = [torch.tensor(np.array(data_item['T_ME'])[:3, :3]) for data_item in robot_data]
             rotation_matrices = torch.stack(ee_ori)
@@ -201,7 +202,7 @@ class Training:
                 template_roi_sampled = sample_points_from_meshes(template_roi_meshes, numberOfSampledPoints).to(self.device)
                 chamfer_loss_roi, _ = chamfer_distance(target_roi_sampled, template_roi_sampled)
             except ValueError:
-                chamfer_loss_roi = torch.tensor(0.5, device=self.device)
+                chamfer_loss_roi = torch.tensor(0.1, device=self.device)
 
 
             # # render images from predicted mesh
@@ -231,26 +232,28 @@ class Training:
             #         total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch = 0, 0, 0, 0
 
             if self.log:
-                for k in range(4):
+                for k in range(batch_size):
                     if names[k] == 'Couch_T1' and int(frames[k]) == 166:
                         pred = mesh_plotly(predicted_meshes[k], template_roi_meshes[k], ["Predicted", "ROI"], ee_pos[k])
                         gt = mesh_plotly(target_meshes[k], target_roi_meshes[k], ["Target", "ROI"], ee_pos[k])
                         comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"], ee_pos[k])
-                        wandb.log({f"predicted_mesh0": wandb.Plotly(pred)})
-                        wandb.log({f"target_mesh0": wandb.Plotly(gt)})
-                        wandb.log({f"comparison0": wandb.Plotly(comparison)})
+                        wandb_dict["predicted_mesh0"] = wandb.Plotly(pred)
+                        wandb_dict["target_mesh0"] = wandb.Plotly(gt)
+                        wandb_dict["comparison0"] = wandb.Plotly(comparison)
 
                     if names[k] == 'Couch_T3' and int(frames[k]) == 60:
                         pred = mesh_plotly(predicted_meshes[k], template_roi_meshes[k], ["Predicted", "ROI"], ee_pos[k])
                         gt = mesh_plotly(target_meshes[k], target_roi_meshes[k], ["Target", "ROI"], ee_pos[k])
                         comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"], ee_pos[k])
-                        wandb.log({f"predicted_mesh1": wandb.Plotly(pred)})
-                        wandb.log({f"target_mesh1": wandb.Plotly(gt)})
-                        wandb.log({f"comparison1": wandb.Plotly(comparison)})
+                        wandb_dict["predicted_mesh1"] = wandb.Plotly(pred)
+                        wandb_dict["target_mesh1"] = wandb.Plotly(gt)
+                        wandb_dict["comparison1"] = wandb.Plotly(comparison)
 
         if self.log:
-            wandb.log({"chamfer_loss_training": total_chamfer_loss, "roi_loss_training": total_roi_loss,
-                       "total_loss_training": total_loss_epoch})
+            wandb_dict["chamfer_loss_training"] = total_chamfer_loss
+            wandb_dict["roi_loss_training"] = total_roi_loss
+            wandb_dict["total_loss_training"] = total_loss_epoch
+            wandb.log(wandb_dict)
 
 
     def validate(self, dataloader):
@@ -424,10 +427,6 @@ def training_main(args):
     for epoch in range(epoch_start, epochs):
         print("Epoch: ", epoch + 1)
         session.train_epoch(train_loader, epoch+1)
-        if epoch == 10:
-            session.roi_weight *= 2
-        if epoch == 20:
-            session.roi_weight *= 2
         #session.validate(valid_loader)
 
     session.save_meshes(train_loader, valid_loader, data_path)

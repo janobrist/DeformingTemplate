@@ -1,6 +1,6 @@
 # Use an NVIDIA CUDA with Ubuntu 22.04 as a parent image
 FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
-RUN apt-get update && apt-get install -y vimq
+RUN apt-get update && apt-get install -y vim
 # Set the working directory in the container
 WORKDIR /usr/src/app
 
