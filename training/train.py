@@ -156,6 +156,7 @@ class Training:
         wandb_dict = {}
         self.decoder.train()
         total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch = 0, 0, 0, 0
+        no_roi = 0
         for i, item in enumerate(dataloader):
             self.optimizer.zero_grad()
             # get data
@@ -202,6 +203,7 @@ class Training:
                 template_roi_sampled = sample_points_from_meshes(template_roi_meshes, numberOfSampledPoints).to(self.device)
                 chamfer_loss_roi, _ = chamfer_distance(target_roi_sampled, template_roi_sampled)
             except ValueError:
+                no_roi += 1
                 chamfer_loss_roi = torch.tensor(0.1, device=self.device)
 
 
@@ -250,9 +252,10 @@ class Training:
                         wandb_dict["comparison1"] = wandb.Plotly(comparison)
 
         if self.log:
-            wandb_dict["chamfer_loss_training"] = total_chamfer_loss
-            wandb_dict["roi_loss_training"] = total_roi_loss
-            wandb_dict["total_loss_training"] = total_loss_epoch
+            wandb_dict["chamfer_loss_training"] = total_chamfer_loss/len(dataloader)
+            wandb_dict["roi_loss_training"] = total_roi_loss/len(dataloader)
+            wandb_dict["total_loss_training"] = total_loss_epoch/len(dataloader)
+            wandb_dict["no_roi"] = no_roi
             wandb.log(wandb_dict)
 
 
