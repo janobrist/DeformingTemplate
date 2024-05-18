@@ -25,7 +25,6 @@ import torch.nn.functional as F
 import time
 
 
-
 def print_memory_usage(local_vars):
     for name, value in local_vars.items():
         print(
@@ -47,24 +46,14 @@ class Training:
         self.optimizer = optim.Adam(params, lr=args['lr'], weight_decay=args['weight_decay'])
         self.scheduler = CosineAnnealingLR(self.optimizer, T_max=10000, eta_min=1e-7)
         self.chamfer_weight_mesh = args['chamfer_weight']
-        self.roi_weight = args['chamfer_weight']/4
+        self.roi_weight = args['roi_weight']
         self.render_weight = args['render_weight']
+        self.normals_weight = args['normals_weight']
         self.log = args['log']
-
 
     def print_memory_usage_class(self):
         for attr, value in self.__dict__.items():
             print(f'{attr} uses {asizeof.asizeof(value)} bytes (deep size)')
-
-    def cosine_similarity_loss(self, pred_normals, gt_normals):
-        # normalize vectors
-        pred_normals = F.normalize(pred_normals, p=2, dim=-1)  # Normalize along the last dimension
-        gt_normals = F.normalize(gt_normals, p=2, dim=-1)
-
-        # Compute cosine similarity between corresponding normals
-        cosine_loss = 1 - (pred_normals * gt_normals).sum(dim=-1).mean()
-
-        return cosine_loss
 
     def get_homeomorphism_model(self):
         n_layers = 6
@@ -108,7 +97,7 @@ class Training:
         #                               collate_fn=lambda b, device=self.device: collate_fn(b, device), drop_last=True)
 
         train_dataloader = DataLoader(combined_dataset, batch_size=batch_size, shuffle=True,
-                                   collate_fn=lambda b, device=self.device: collate_fn(b, device), drop_last=True)
+                                      collate_fn=lambda b, device=self.device: collate_fn(b, device), drop_last=True)
         valid_dataloader = []
 
         return train_dataloader, valid_dataloader
@@ -123,10 +112,14 @@ class Training:
             # get vertices
             vertices_mask = distances_squared < distance_threshold ** 2
             verts = mesh.verts_packed()[vertices_mask]
-            vertices_indices = vertices_mask.nonzero(as_tuple=True)[0]
+            vertices_indices0 = vertices_mask.nonzero(as_tuple=True)[0]
 
             # get directions
-            directions = - (verts - pos)
+            boundaries = mesh.get_bounding_boxes()
+            if boundaries[0, 1, 1] < pos[0, 1]:
+                directions = (verts - pos)
+            else:
+                directions = - (verts - pos)
             directions /= directions.norm(p=2, dim=1, keepdim=True)
 
             # filter for directions
@@ -137,7 +130,18 @@ class Training:
 
             directions_mask = similar_vectors.nonzero(as_tuple=True)[0]
 
-            vertices_indices = vertices_indices[directions_mask]
+            vertices_indices = vertices_indices0[directions_mask]
+
+            if vertices_indices.shape[0] == 0:
+                if boundaries[0, 1, 1] - boundaries[0, 1, 0] > 0.1:
+                    directions *= -1
+                    dot_products = torch.matmul(directions, target_direction)
+                    angle_threshold = torch.cos(torch.deg2rad(torch.tensor(cosine_threshold)))
+                    similar_vectors = dot_products > angle_threshold
+
+                    directions_mask = similar_vectors.nonzero(as_tuple=True)[0]
+
+                    vertices_indices = vertices_indices0[directions_mask]
 
             # get faces
             faces = mesh.faces_packed()
@@ -152,10 +156,34 @@ class Training:
 
         return selected_meshes
 
+    def get_closest_vertices(self, target, predicted):
+        # Expand dimensions to calculate pairwise distances
+        predicted = predicted.unsqueeze(2)  # Shape: (batch, num_verts, 1, 3)
+        target = target.unsqueeze(1)  # Shape: (batch, 1, num_verts, 3)
+
+        # Compute squared Euclidean distances
+        distances_squared = torch.sum((predicted - target) ** 2,
+                                      dim=-1)  # Shape: (batch, num_verts, num_verts)
+
+        # Find the indices of the minimum distances along the target_vertices dimension
+        closest_indices = torch.argmin(distances_squared, dim=2)
+
+        return closest_indices
+
+    def cosine_similarity_loss(self, pred_normals, gt_normals):
+        # normalize vectors
+        pred_normals = F.normalize(pred_normals, p=2, dim=-1)  # Normalize along the last dimension
+        gt_normals = F.normalize(gt_normals, p=2, dim=-1)
+
+        # Compute cosine similarity between corresponding normals
+        cosine_loss = 1 - (pred_normals * gt_normals).sum(dim=-1).mean()
+
+        return cosine_loss
+
     def train_epoch(self, dataloader, epoch):
         wandb_dict = {}
         self.decoder.train()
-        total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch = 0, 0, 0, 0
+        total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch, total_normals_loss = 0, 0, 0, 0, 0
         no_roi = 0
         for i, item in enumerate(dataloader):
             self.optimizer.zero_grad()
@@ -172,7 +200,6 @@ class Training:
             ee_position = torch.stack([torch.tensor(data_item['ee_pos']) for data_item in robot_data])
             forces_input = torch.cat((forces, ee_position), dim=1).to(self.device).float()
             force_features = self.force_encoder(forces_input)
-
             reshaped_features = torch.cat((reshaped_features, force_features), dim=1)
 
             # predict deformation
@@ -183,13 +210,19 @@ class Training:
             predicted_mesh_vertices = [coordinates[s][:num_points[s]] for s in range(batch_size)]
             predicted_meshes = Meshes(verts=predicted_mesh_vertices, faces=template_faces)
 
-
-
-            # sample meshes
+            # chamfer loss
             numberOfSampledPoints = 2500
-            predicted_sampled = sample_points_from_meshes(predicted_meshes, numberOfSampledPoints).to(self.device)
-            target_sampled = sample_points_from_meshes(target_meshes, numberOfSampledPoints).to(self.device)
+            predicted_sampled, normals_predicted = sample_points_from_meshes(predicted_meshes, numberOfSampledPoints,
+                                                                             return_normals=True)
+            target_sampled, normals_target = sample_points_from_meshes(target_meshes, numberOfSampledPoints,
+                                                                       return_normals=True)
             chamfer_loss_mesh, _ = chamfer_distance(target_sampled, predicted_sampled)
+
+            # normals loss
+            indices_mapping = self.get_closest_vertices(target_sampled, predicted_sampled)
+            batch_indices = torch.arange(batch_size).unsqueeze(1).expand(-1, numberOfSampledPoints)
+            gt_normals = normals_target[batch_indices, indices_mapping]
+            normals_loss = self.cosine_similarity_loss(normals_predicted, gt_normals)
 
             # roi loss
             numberOfSampledPoints = 250
@@ -197,15 +230,15 @@ class Training:
             ee_ori = [torch.tensor(np.array(data_item['T_ME'])[:3, :3]) for data_item in robot_data]
             rotation_matrices = torch.stack(ee_ori)
             target_roi_meshes = self.get_roi_meshes(target_meshes, ee_pos, rotation_matrices, 0.3, 60)
+            template_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos, rotation_matrices, 0.3, 60)
             try:
-                template_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos, rotation_matrices, 0.3, 60)
                 target_roi_sampled = sample_points_from_meshes(target_roi_meshes, numberOfSampledPoints).to(self.device)
-                template_roi_sampled = sample_points_from_meshes(template_roi_meshes, numberOfSampledPoints).to(self.device)
+                template_roi_sampled = sample_points_from_meshes(template_roi_meshes, numberOfSampledPoints).to(
+                    self.device)
                 chamfer_loss_roi, _ = chamfer_distance(target_roi_sampled, template_roi_sampled)
             except ValueError:
                 no_roi += 1
-                chamfer_loss_roi = torch.tensor(0.1, device=self.device)
-
+                chamfer_loss_roi = torch.tensor(0.05, device=self.device)
 
             # # render images from predicted mesh
             # transformed_mesh = self.transform_meshes(predicted_meshes, centers, scales)
@@ -216,15 +249,17 @@ class Training:
             # # get render loss
             # render_loss = self.perceptual_loss(rendered_images, images, masks)
 
-            total_loss = chamfer_loss_mesh * self.chamfer_weight_mesh + chamfer_loss_roi*self.roi_weight
+            total_loss = chamfer_loss_mesh * self.chamfer_weight_mesh + normals_loss*self.normals_weight #chamfer_loss_roi * self.roi_weight
 
-            print("Training batch ", i, "Chamfer loss: ", chamfer_loss_mesh.item(), "ROI loss: ", chamfer_loss_roi.item(), "Total loss: ", total_loss.item())
+            print("Training batch ", i, "Chamfer loss: ", chamfer_loss_mesh.item(), "ROI loss: ",
+                  chamfer_loss_roi.item(), "Normals loss: ", normals_loss.item())
 
             total_loss.backward()
 
             total_chamfer_loss += chamfer_loss_mesh
             total_roi_loss += chamfer_loss_roi
-            #total_render_loss += render_loss
+            total_normals_loss += normals_loss
+            # total_render_loss += render_loss
             total_loss_epoch += total_loss
             self.optimizer.step()
             self.scheduler.step()
@@ -238,7 +273,8 @@ class Training:
                     if names[k] == 'Couch_T1' and int(frames[k]) == 166:
                         pred = mesh_plotly(predicted_meshes[k], template_roi_meshes[k], ["Predicted", "ROI"], ee_pos[k])
                         gt = mesh_plotly(target_meshes[k], target_roi_meshes[k], ["Target", "ROI"], ee_pos[k])
-                        comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"], ee_pos[k])
+                        comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"],
+                                                 ee_pos[k])
                         wandb_dict["predicted_mesh0"] = wandb.Plotly(pred)
                         wandb_dict["target_mesh0"] = wandb.Plotly(gt)
                         wandb_dict["comparison0"] = wandb.Plotly(comparison)
@@ -246,18 +282,19 @@ class Training:
                     if names[k] == 'Couch_T3' and int(frames[k]) == 60:
                         pred = mesh_plotly(predicted_meshes[k], template_roi_meshes[k], ["Predicted", "ROI"], ee_pos[k])
                         gt = mesh_plotly(target_meshes[k], target_roi_meshes[k], ["Target", "ROI"], ee_pos[k])
-                        comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"], ee_pos[k])
+                        comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"],
+                                                 ee_pos[k])
                         wandb_dict["predicted_mesh1"] = wandb.Plotly(pred)
                         wandb_dict["target_mesh1"] = wandb.Plotly(gt)
                         wandb_dict["comparison1"] = wandb.Plotly(comparison)
 
         if self.log:
-            wandb_dict["chamfer_loss_training"] = total_chamfer_loss/len(dataloader)
-            wandb_dict["roi_loss_training"] = total_roi_loss/len(dataloader)
-            wandb_dict["total_loss_training"] = total_loss_epoch/len(dataloader)
+            wandb_dict["chamfer_loss_training"] = total_chamfer_loss / len(dataloader)
+            wandb_dict["normals_loss_training"] = total_normals_loss / len(dataloader)
+            wandb_dict["roi_loss_training"] = total_roi_loss / len(dataloader)
+            wandb_dict["total_loss_training"] = total_loss_epoch / len(dataloader)
             wandb_dict["no_roi"] = no_roi
             wandb.log(wandb_dict)
-
 
     def validate(self, dataloader):
         self.decoder.eval()
@@ -306,12 +343,12 @@ class Training:
                 # # get render loss
                 # render_loss = self.perceptual_loss(rendered_images, images, masks)
 
-
                 total_chamfer_loss += chamfer_loss_mesh
                 total_roi_loss += chamfer_loss_roi
-                if i%10 == 0 and i > 0:
+                if i % 10 == 0 and i > 0:
                     if self.log:
-                        wandb.log({"chamfer_loss_validation": total_chamfer_loss/10, "roi_loss_validation": total_roi_loss/10})
+                        wandb.log({"chamfer_loss_validation": total_chamfer_loss / 10,
+                                   "roi_loss_validation": total_roi_loss / 10})
                         total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch = 0, 0, 0, 0
 
                 # log meshes to wandb
@@ -324,7 +361,6 @@ class Training:
                             wandb.log({f"predicted_mesh{k}": wandb.Plotly(pred)})
                             wandb.log({f"target_mesh{k}": wandb.Plotly(gt)})
                             wandb.log({f"comparison{k}": wandb.Plotly(comparison)})
-
 
     def transform_meshes(self, meshes, centers, scales):
         transformed_verts = []
@@ -393,6 +429,7 @@ class Training:
 
 def training_main(args):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(device)
     data_path = 'data'
     epochs = args.epochs
     epoch_start = 0
@@ -400,9 +437,13 @@ def training_main(args):
     lr = args.lr
     weight_decay = 5e-6
     chamfer_weight = 1
+    roi_weight = 0
+    normals_weight = 0.005
     render_weight = 1
     log = args.log
-    parameters = {"lr": lr, "weight_decay": weight_decay, "chamfer_weight": chamfer_weight, "render_weight": render_weight, "log": log}
+    parameters = {"lr": lr, "weight_decay": weight_decay, "chamfer_weight": chamfer_weight,
+                  "render_weight": render_weight, "roi_weight": roi_weight, "normals_weight": normals_weight,
+                  "log": log}
 
     if log:
         wandb.init(
@@ -429,8 +470,7 @@ def training_main(args):
 
     for epoch in range(epoch_start, epochs):
         print("Epoch: ", epoch + 1)
-        session.train_epoch(train_loader, epoch+1)
-        #session.validate(valid_loader)
+        session.train_epoch(train_loader, epoch + 1)
+        # session.validate(valid_loader)
 
     session.save_meshes(train_loader, valid_loader, data_path)
-
