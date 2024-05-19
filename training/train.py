@@ -225,18 +225,17 @@ class Training:
             ee_pos = [data_item['ee_pos'] for data_item in robot_data]
             ee_ori = [torch.tensor(np.array(data_item['T_ME'])[:3, :3]) for data_item in robot_data]
             rotation_matrices = torch.stack(ee_ori)
-            target_roi_meshes = self.get_roi_meshes(target_meshes, ee_pos, rotation_matrices, 0.3, 60)
-            predicted_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos, rotation_matrices, 0.3, 60)
+            target_roi_meshes = self.get_roi_meshes(target_meshes, ee_pos, rotation_matrices, 0.4, 70)
+            predicted_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos, rotation_matrices, 0.25, 50)
             try:
                 target_roi_sampled, target_roi_normals = sample_points_from_meshes(target_roi_meshes, numberOfSampledPoints, return_normals=True)
                 predicted_roi_sampled, predicted_roi_normals = sample_points_from_meshes(predicted_roi_meshes, numberOfSampledPoints, return_normals=True)
-                chamfer_loss_roi, _ = chamfer_distance(target_sampled, predicted_roi_sampled)
+                chamfer_loss_roi, _ = chamfer_distance(target_roi_sampled, predicted_roi_sampled)
 
                 # normals loss
-                indices_mapping = self.get_closest_vertices(target_sampled, predicted_roi_sampled)
+                indices_mapping = self.get_closest_vertices(target_roi_sampled, predicted_roi_sampled)
                 batch_indices = torch.arange(batch_size).unsqueeze(1).expand(-1, numberOfSampledPoints)
-                gt_normals = normals_target[batch_indices, indices_mapping]
-                print(gt_normals.shape, predicted_roi_normals.shape)
+                gt_normals = target_roi_normals[batch_indices, indices_mapping]
                 normals_loss = self.cosine_similarity_loss(predicted_roi_normals, gt_normals)
             except ValueError:
                 no_roi += 1
@@ -244,7 +243,7 @@ class Training:
 
                 # normals loss
                 indices_mapping = self.get_closest_vertices(target_sampled, predicted_sampled)
-                batch_indices = torch.arange(batch_size).unsqueeze(1).expand(-1, numberOfSampledPoints)
+                batch_indices = torch.arange(batch_size).unsqueeze(1).expand(-1, 2500)
                 gt_normals = normals_target[batch_indices, indices_mapping]
                 normals_loss = self.cosine_similarity_loss(normals_predicted, gt_normals)
 
