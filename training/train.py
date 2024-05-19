@@ -230,12 +230,12 @@ class Training:
             ee_ori = [torch.tensor(np.array(data_item['T_ME'])[:3, :3]) for data_item in robot_data]
             rotation_matrices = torch.stack(ee_ori)
             target_roi_meshes = self.get_roi_meshes(target_meshes, ee_pos, rotation_matrices, 0.3, 60)
-            template_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos, rotation_matrices, 0.3, 60)
+            predicted_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos, rotation_matrices, 0.3, 60)
             try:
                 target_roi_sampled = sample_points_from_meshes(target_roi_meshes, numberOfSampledPoints).to(self.device)
-                template_roi_sampled = sample_points_from_meshes(template_roi_meshes, numberOfSampledPoints).to(
+                predicted_roi_sampled = sample_points_from_meshes(predicted_roi_meshes, numberOfSampledPoints).to(
                     self.device)
-                chamfer_loss_roi, _ = chamfer_distance(target_roi_sampled, template_roi_sampled)
+                chamfer_loss_roi, _ = chamfer_distance(target_sampled, predicted_roi_sampled)
             except ValueError:
                 no_roi += 1
                 chamfer_loss_roi = torch.tensor(0.05, device=self.device)
@@ -271,7 +271,7 @@ class Training:
             if self.log:
                 for k in range(batch_size):
                     if names[k] == 'Couch_T1' and int(frames[k]) == 166:
-                        pred = mesh_plotly(predicted_meshes[k], template_roi_meshes[k], ["Predicted", "ROI"], ee_pos[k])
+                        pred = mesh_plotly(predicted_meshes[k], predicted_roi_meshes[k], ["Predicted", "ROI"], ee_pos[k])
                         gt = mesh_plotly(target_meshes[k], target_roi_meshes[k], ["Target", "ROI"], ee_pos[k])
                         comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"],
                                                  ee_pos[k])
@@ -280,7 +280,7 @@ class Training:
                         wandb_dict["comparison0"] = wandb.Plotly(comparison)
 
                     if names[k] == 'Couch_T3' and int(frames[k]) == 60:
-                        pred = mesh_plotly(predicted_meshes[k], template_roi_meshes[k], ["Predicted", "ROI"], ee_pos[k])
+                        pred = mesh_plotly(predicted_meshes[k], predicted_roi_meshes[k], ["Predicted", "ROI"], ee_pos[k])
                         gt = mesh_plotly(target_meshes[k], target_roi_meshes[k], ["Target", "ROI"], ee_pos[k])
                         comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"],
                                                  ee_pos[k])
@@ -437,7 +437,7 @@ def training_main(args):
     lr = args.lr
     weight_decay = 5e-6
     chamfer_weight = 1
-    roi_weight = 0
+    roi_weight = 0.25
     normals_weight = 0.005
     render_weight = 1
     log = args.log
