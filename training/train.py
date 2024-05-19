@@ -218,11 +218,7 @@ class Training:
                                                                        return_normals=True)
             chamfer_loss_mesh, _ = chamfer_distance(target_sampled, predicted_sampled)
 
-            # normals loss
-            indices_mapping = self.get_closest_vertices(target_sampled, predicted_sampled)
-            batch_indices = torch.arange(batch_size).unsqueeze(1).expand(-1, numberOfSampledPoints)
-            gt_normals = normals_target[batch_indices, indices_mapping]
-            normals_loss = self.cosine_similarity_loss(normals_predicted, gt_normals)
+
 
             # roi loss
             numberOfSampledPoints = 250
@@ -232,13 +228,25 @@ class Training:
             target_roi_meshes = self.get_roi_meshes(target_meshes, ee_pos, rotation_matrices, 0.3, 60)
             predicted_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos, rotation_matrices, 0.3, 60)
             try:
-                target_roi_sampled = sample_points_from_meshes(target_roi_meshes, numberOfSampledPoints).to(self.device)
-                predicted_roi_sampled = sample_points_from_meshes(predicted_roi_meshes, numberOfSampledPoints).to(
-                    self.device)
+                target_roi_sampled, target_roi_normals = sample_points_from_meshes(target_roi_meshes, numberOfSampledPoints, return_normals=True)
+                predicted_roi_sampled, predicted_roi_normals = sample_points_from_meshes(predicted_roi_meshes, numberOfSampledPoints, return_normals=True)
                 chamfer_loss_roi, _ = chamfer_distance(target_sampled, predicted_roi_sampled)
+
+                # normals loss
+                indices_mapping = self.get_closest_vertices(target_sampled, predicted_roi_sampled)
+                batch_indices = torch.arange(batch_size).unsqueeze(1).expand(-1, numberOfSampledPoints)
+                gt_normals = normals_target[batch_indices, indices_mapping]
+                print(gt_normals.shape, predicted_roi_normals.shape)
+                normals_loss = self.cosine_similarity_loss(predicted_roi_normals, gt_normals)
             except ValueError:
                 no_roi += 1
                 chamfer_loss_roi = torch.tensor(0.05, device=self.device)
+
+                # normals loss
+                indices_mapping = self.get_closest_vertices(target_sampled, predicted_sampled)
+                batch_indices = torch.arange(batch_size).unsqueeze(1).expand(-1, numberOfSampledPoints)
+                gt_normals = normals_target[batch_indices, indices_mapping]
+                normals_loss = self.cosine_similarity_loss(normals_predicted, gt_normals)
 
             # # render images from predicted mesh
             # transformed_mesh = self.transform_meshes(predicted_meshes, centers, scales)
@@ -249,7 +257,7 @@ class Training:
             # # get render loss
             # render_loss = self.perceptual_loss(rendered_images, images, masks)
 
-            total_loss = chamfer_loss_mesh * self.chamfer_weight_mesh + normals_loss*self.normals_weight #chamfer_loss_roi * self.roi_weight
+            total_loss = chamfer_loss_mesh * self.chamfer_weight_mesh + normals_loss*self.normals_weight + chamfer_loss_roi * self.roi_weight
 
             print("Training batch ", i, "Chamfer loss: ", chamfer_loss_mesh.item(), "ROI loss: ",
                   chamfer_loss_roi.item(), "Normals loss: ", normals_loss.item())
