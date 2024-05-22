@@ -105,12 +105,13 @@ class DatasetMeshWithImages(Dataset):
 
 
         # get template mesh
-        template_mesh_path = os.path.join(self.src_root, "mesh-f00001.obj")
+        template_mesh_path = os.path.join(self.src_root, "mesh-f00001_repaired.obj")
         template_mesh_vertices, template_mesh_faces, center_template, scale_template = self.load_mesh(template_mesh_path)
-        template_tex_tensor = torch.load(os.path.join(self.src_root, "textures.pth"))
-        template_mesh_textures = TexturesUV(maps=template_tex_tensor['maps'], verts_uvs=template_tex_tensor['verts_uvs'], faces_uvs=template_tex_tensor['faces_uvs'])
+        #template_tex_tensor = torch.load(os.path.join(self.src_root, "textures.pth"))
+        #template_mesh_textures = TexturesUV(maps=template_tex_tensor['maps'], verts_uvs=template_tex_tensor['verts_uvs'], faces_uvs=template_tex_tensor['faces_uvs'])
 
-        template_mesh = Meshes(verts=[template_mesh_vertices], faces=[template_mesh_faces], textures=template_mesh_textures).to(self.device)
+        #template_mesh = Meshes(verts=[template_mesh_vertices], faces=[template_mesh_faces], textures=template_mesh_textures).to(self.device)
+        template_mesh = Meshes(verts=[template_mesh_vertices], faces=[template_mesh_faces]).to(self.device)
 
         # load images
         images = self.load_images(frame)
@@ -139,6 +140,7 @@ class DatasetMeshWithImages(Dataset):
     def load_mesh(self, path):
         # load
         mesh = trimesh.load(path)
+        print(mesh.is_watertight)
         verts = torch.tensor(mesh.vertices, dtype=torch.float32)
         faces = torch.tensor(mesh.faces, dtype=torch.float32)
 
@@ -223,8 +225,8 @@ def collate_fn(data, device):
 
 
     # template meshes
-    textures_template = [item['template_mesh'].textures for item in data]
-    textures = textures_template[0].join_batch(textures_template[1:])
+    # textures_template = [item['template_mesh'].textures for item in data]
+    # textures = textures_template[0].join_batch(textures_template[1:])
     template_faces = [item['template_mesh'].faces_packed() for item in data]
 
     # target meshes
@@ -239,7 +241,7 @@ def collate_fn(data, device):
     names = [item['name'] for item in data]
     robot_data = [item['robot_data'] for item in data]
 
-    return target_meshes, features_verts_src, template_faces, textures, images, camera_parameters, centers, scales, frame, num_vertices_src, names, robot_data
+    return target_meshes, features_verts_src, template_faces, images, camera_parameters, centers, scales, frame, num_vertices_src, names, robot_data
 
 
 

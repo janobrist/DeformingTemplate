@@ -54,24 +54,21 @@ def convert_obj_format(input_path, output_path):
 
 if __name__ == "__main__":
     # read mesh wit pyvista
-    mesh_path = "../data/Couch_T1/template_mesh/mesh-f00001.obj"
+    mesh_path = "../data/Couch_T3/template_mesh/mesh-f00001.obj"
+    #mesh_path = "simplified.ply"
+    mesh = o3d.io.read_triangle_mesh(mesh_path)
+    print("Is mesh watertight:", mesh.is_watertight())
     mesh = pv.read(mesh_path)
 
-    # Load the texture
-    texture_image = imageio.imread("../data/Couch_T1/template_mesh/Atlas-F00001.png")
 
-    # Convert the texture to a pyvista texture
-    texture = pv.Texture(texture_image)
-
-    if not mesh.active_t_coords.any():
-        raise ValueError("The mesh does not have texture coordinates.")
-
-    # Apply the texture to the mesh
-    mesh.textures["my_texture"] = texture
-
-    z = y
     # repair mesh
     meshfix = mf.MeshFix(mesh)
+    holes = meshfix.extract_holes()
+    p = pv.Plotter()
+    p.add_mesh(mesh, color=True)
+    p.add_mesh(holes, color="r", line_width=8)
+    p.enable_eye_dome_lighting()  # helps depth perception
+    p.show()
     meshfix.repair(verbose=True, joincomp=True, remove_smallest_components=False)
 
     # convert mesh to open3d
