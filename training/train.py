@@ -17,7 +17,7 @@ from training.render import render_meshes
 from torch.utils.data import DataLoader, ConcatDataset, random_split
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torchvision.models import vgg19, VGG19_Weights, vit_l_32, ViT_L_32_Weights
+from torchvision.models import resnet50, ResNet50_Weights #, VGG19_Weights, vit_l_32, ViT_L_32_Weights
 import sys
 from pympler import asizeof
 import wandb
@@ -38,7 +38,8 @@ class Training:
         # models
         self.decoder = self.get_homeomorphism_model().to(self.device)
         #self.image_encoder = vgg19(weights=VGG19_Weights.DEFAULT).eval().to(self.device)
-        self.image_encoder = vit_l_32(weights=ViT_L_32_Weights.DEFAULT).eval().to(self.device)
+        #self.image_encoder = vit_l_32(weights=ViT_L_32_Weights.DEFAULT).eval().to(self.device)
+        self.image_encoder = resnet50(weights=ResNet50_Weights.DEFAULT).eval().to(self.device)
         self.perceptual_loss = MaskedPerceptualLoss().to(self.device)
         self.force_encoder = ForceFeatures().to(self.device)
 
