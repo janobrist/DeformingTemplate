@@ -17,7 +17,7 @@ from training.render import render_meshes
 from torch.utils.data import DataLoader, ConcatDataset, random_split
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torchvision.models import vgg19, VGG19_Weights
+from torchvision.models import vgg19, VGG19_Weights, vit_l_32, ViT_L_32_Weights
 import sys
 from pympler import asizeof
 import wandb
@@ -37,7 +37,8 @@ class Training:
 
         # models
         self.decoder = self.get_homeomorphism_model().to(self.device)
-        self.image_encoder = vgg19(weights=VGG19_Weights.DEFAULT).eval().to(self.device)
+        #self.image_encoder = vgg19(weights=VGG19_Weights.DEFAULT).eval().to(self.device)
+        self.image_encoder = vit_l_32(weights=ViT_L_32_Weights.DEFAULT).eval().to(self.device)
         self.perceptual_loss = MaskedPerceptualLoss().to(self.device)
         self.force_encoder = ForceFeatures().to(self.device)
 
@@ -248,7 +249,7 @@ class Training:
             # # get render loss
             # render_loss = self.perceptual_loss(rendered_images, images, masks)
 
-            total_loss = chamfer_loss_mesh * self.chamfer_weight_mesh + normals_loss_roi*self.normals_weight + chamfer_loss_roi * self.roi_weight
+            total_loss = chamfer_loss_mesh * self.chamfer_weight_mesh #+ normals_loss_roi*self.normals_weight + chamfer_loss_roi * self.roi_weight
 
             print("Training batch ", i, "Chamfer loss: ", chamfer_loss_mesh.item(), "ROI loss: ",
                   chamfer_loss_roi.item(), "Normals loss: ", normals_loss_roi.item())
