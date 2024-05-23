@@ -140,7 +140,6 @@ class DatasetMeshWithImages(Dataset):
     def load_mesh(self, path):
         # load
         mesh = trimesh.load(path)
-        print(mesh.is_watertight)
         verts = torch.tensor(mesh.vertices, dtype=torch.float32)
         faces = torch.tensor(mesh.faces, dtype=torch.float32)
 

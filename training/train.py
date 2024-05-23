@@ -250,7 +250,7 @@ class Training:
             # # get render loss
             # render_loss = self.perceptual_loss(rendered_images, images, masks)
 
-            total_loss = chamfer_loss_mesh * self.chamfer_weight_mesh + normals_loss_roi*self.normals_weight #+ chamfer_loss_roi * self.roi_weight
+            total_loss = chamfer_loss_mesh * self.chamfer_weight_mesh + normals_loss*self.normals_weight #+ chamfer_loss_roi * self.roi_weight
 
             print("Training batch ", i, "Chamfer loss: ", chamfer_loss_mesh.item(), "ROI loss: ",
                   chamfer_loss_roi.item(), "Normals loss: ", normals_loss.item())

@@ -32,4 +32,4 @@ EXPOSE 80
 ENV NAME World
 
 # Run app.py when the container launches
-#CMD ["conda", "run", "--no-capture-output", "-n", "test3", "python", "main.py"]
+CMD ["conda", "run", "--no-capture-output", "-n", "test3", "python", "main.py"]
