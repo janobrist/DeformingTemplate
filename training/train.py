@@ -250,16 +250,16 @@ class Training:
             # # get render loss
             # render_loss = self.perceptual_loss(rendered_images, images, masks)
 
-            total_loss = chamfer_loss_mesh * self.chamfer_weight_mesh + chamfer_loss_roi * self.roi_weight#+ normals_loss_roi*self.normals_weight + chamfer_loss_roi * self.roi_weight
+            total_loss = chamfer_loss_mesh * self.chamfer_weight_mesh + normals_loss_roi*self.normals_weight #+ chamfer_loss_roi * self.roi_weight
 
             print("Training batch ", i, "Chamfer loss: ", chamfer_loss_mesh.item(), "ROI loss: ",
-                  chamfer_loss_roi.item(), "Normals loss: ", normals_loss_roi.item())
+                  chamfer_loss_roi.item(), "Normals loss: ", normals_loss.item())
 
             total_loss.backward()
 
             total_chamfer_loss += chamfer_loss_mesh
             total_roi_loss += chamfer_loss_roi
-            total_normals_loss += normals_loss_roi
+            total_normals_loss += normals_loss
             # total_render_loss += render_loss
             total_loss_epoch += total_loss
             self.optimizer.step()
@@ -438,8 +438,8 @@ def training_main(args):
     lr = args.lr
     weight_decay = 5e-6
     chamfer_weight = 1
-    roi_weight = 0.25
-    normals_weight = 0.005
+    roi_weight = 0.0
+    normals_weight = 0.01
     render_weight = 1
     log = args.log
     parameters = {"lr": lr, "weight_decay": weight_decay, "chamfer_weight": chamfer_weight,
