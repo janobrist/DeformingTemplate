@@ -1,6 +1,7 @@
 import pyvista as pv
 import pymeshfix as mf
 import open3d as o3d
+import os
 
 def reapir_mesh(mesh_path, output_path):
     # read mesh wit pyvista
@@ -26,6 +27,10 @@ if __name__ == "__main__":
     num_takes = 10
     shot = "Couch"
     for i in range(num_takes):
-        mesh_path = f"../data/{shot}_T{i+1}/template_mesh/mesh-f00001.obj"
-        output_path = f"../data/{shot}_T{i+1}/template_mesh/mesh-f00001_repaired.obj"
+        mesh_path = f"../data/{shot}_T{i+1}/template_mesh"
+        for file in os.listdir(mesh_path):
+            if file.endswith(".obj"):
+                mesh_path = os.path.join(mesh_path, file)
+                break
+        output_path = f"../data/{shot}_T{i+1}/template_mesh/repaired.obj"
         reapir_mesh(mesh_path, output_path)

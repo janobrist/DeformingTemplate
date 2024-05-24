@@ -105,7 +105,7 @@ class DatasetMeshWithImages(Dataset):
 
 
         # get template mesh
-        template_mesh_path = os.path.join(self.src_root, "mesh-f00001_repaired.obj")
+        template_mesh_path = os.path.join(self.src_root, "repaired.obj")
         template_mesh_vertices, template_mesh_faces, center_template, scale_template = self.load_mesh(template_mesh_path)
         #template_tex_tensor = torch.load(os.path.join(self.src_root, "textures.pth"))
         #template_mesh_textures = TexturesUV(maps=template_tex_tensor['maps'], verts_uvs=template_tex_tensor['verts_uvs'], faces_uvs=template_tex_tensor['faces_uvs'])

@@ -40,18 +40,17 @@ class Training:
         #self.image_encoder = vgg19(weights=VGG19_Weights.DEFAULT).eval().to(self.device)
         #self.image_encoder = vit_l_32(weights=ViT_L_32_Weights.DEFAULT).eval().to(self.device)
         self.image_encoder = resnet50(weights=ResNet50_Weights.DEFAULT).eval().to(self.device)
-        self.perceptual_loss = MaskedPerceptualLoss().to(self.device)
+        #self.perceptual_loss = MaskedPerceptualLoss().to(self.device)
         self.force_encoder = ForceFeatures().to(self.device)
 
         # optimizer and weights
         params = list(self.force_encoder.parameters()) + list(self.decoder.parameters())
-        self.optimizer = optim.Adam(params, lr=args['lr'], weight_decay=args['weight_decay'])
+        self.optimizer = optim.Adam(params, lr=args.lr, weight_decay=5e-6)
         self.scheduler = CosineAnnealingLR(self.optimizer, T_max=10000, eta_min=1e-7)
-        self.chamfer_weight_mesh = args['chamfer_weight']
-        self.roi_weight = args['roi_weight']
-        self.render_weight = args['render_weight']
-        self.normals_weight = args['normals_weight']
-        self.log = args['log']
+        self.chamfer_weight = args.chamfer_weight
+        self.normals_weight = args.normals_weight
+        self.roi_chamfer_weight = args.roi_chamfer_weight
+        self.roi_normals_weight = args.roi_normals_weight
 
     def print_memory_usage_class(self):
         for attr, value in self.__dict__.items():
@@ -88,19 +87,16 @@ class Training:
         combined_dataset = ConcatDataset(datasets)
         # split the dataset into training and validation
         total_size = len(combined_dataset)
-        validation_fraction = 0.2
+        validation_fraction = 0.15
         valid_size = int(total_size * validation_fraction)
         train_size = total_size - valid_size  # Rest will be for training
         train_dataset, valid_dataset = random_split(combined_dataset, [train_size, valid_size])
 
-        # train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
-        #                               collate_fn=lambda b, device=self.device: collate_fn(b, device), drop_last=True)
-        # valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True,
-        #                               collate_fn=lambda b, device=self.device: collate_fn(b, device), drop_last=True)
-
-        train_dataloader = DataLoader(combined_dataset, batch_size=batch_size, shuffle=True,
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
                                       collate_fn=lambda b, device=self.device: collate_fn(b, device), drop_last=True)
-        valid_dataloader = []
+        valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True,
+                                      collate_fn=lambda b, device=self.device: collate_fn(b, device), drop_last=True)
+
 
         return train_dataloader, valid_dataloader
 
@@ -185,8 +181,7 @@ class Training:
     def train_epoch(self, dataloader, epoch):
         wandb_dict = {}
         self.decoder.train()
-        total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch, total_normals_loss = 0, 0, 0, 0, 0
-        no_roi = 0
+        total_chamfer_loss, total_roi_loss, total_loss_epoch, total_normals_loss, total_roi_normals_loss = 0, 0, 0, 0, 0
         for i, item in enumerate(dataloader):
             self.optimizer.zero_grad()
             # get data
@@ -220,22 +215,19 @@ class Training:
                                                                        return_normals=True)
             chamfer_loss_mesh, normals_loss = chamfer_distance(target_sampled, predicted_sampled, x_normals=normals_target, y_normals=normals_predicted)
 
-
-
             # roi loss
             numberOfSampledPoints = 250
             ee_pos = [data_item['ee_pos'] for data_item in robot_data]
             ee_ori = [torch.tensor(np.array(data_item['T_ME'])[:3, :3]) for data_item in robot_data]
             rotation_matrices = torch.stack(ee_ori)
-            target_roi_meshes = self.get_roi_meshes(target_meshes, ee_pos, rotation_matrices, 0.4, 70)
-            predicted_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos, rotation_matrices, 0.25, 50)
+            target_roi_meshes = self.get_roi_meshes(target_meshes, ee_pos, rotation_matrices, 0.4, 80)
+            predicted_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos, rotation_matrices, 0.25, 30)
             try:
                 target_roi_sampled, target_roi_normals = sample_points_from_meshes(target_roi_meshes, numberOfSampledPoints, return_normals=True)
                 predicted_roi_sampled, predicted_roi_normals = sample_points_from_meshes(predicted_roi_meshes, numberOfSampledPoints, return_normals=True)
                 chamfer_loss_roi, normals_loss_roi = chamfer_distance(target_roi_sampled, predicted_roi_sampled, x_normals=target_roi_normals, y_normals=predicted_roi_normals)
 
             except ValueError:
-                no_roi += 1
                 chamfer_loss_roi = torch.tensor(0.05, device=self.device)
                 normals_loss_roi = torch.tensor(0.4, device=self.device)
 
@@ -250,66 +242,51 @@ class Training:
             # # get render loss
             # render_loss = self.perceptual_loss(rendered_images, images, masks)
 
-            total_loss = chamfer_loss_mesh * self.chamfer_weight_mesh + normals_loss*self.normals_weight #+ chamfer_loss_roi * self.roi_weight
-
-            print("Training batch ", i, "Chamfer loss: ", chamfer_loss_mesh.item(), "ROI loss: ",
-                  chamfer_loss_roi.item(), "Normals loss: ", normals_loss.item())
-
+            # backward pass
+            total_loss = chamfer_loss_mesh * self.chamfer_weight + normals_loss*self.normals_weight + chamfer_loss_roi * self.roi_chamfer_weight + normals_loss_roi * self.roi_normals_weight
             total_loss.backward()
 
+            # losses for logging
             total_chamfer_loss += chamfer_loss_mesh
             total_roi_loss += chamfer_loss_roi
+            total_roi_normals_loss += normals_loss_roi
             total_normals_loss += normals_loss
-            # total_render_loss += render_loss
             total_loss_epoch += total_loss
+
+
             self.optimizer.step()
             self.scheduler.step()
-            # if i%10 == 0 and i > 0:
-            #     if self.log:
-            #         wandb.log({"chamfer_loss_training": total_chamfer_loss/10, "roi_loss_training": total_roi_loss/10, "total_loss_training": total_loss/10})
-            #         total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch = 0, 0, 0, 0
+            break
 
-            if self.log:
-                for k in range(batch_size):
-                    if names[k] == 'Couch_T1' and int(frames[k]) == 166:
-                        pred = mesh_plotly(predicted_meshes[k], predicted_roi_meshes[k], ["Predicted", "ROI"], ee_pos[k])
-                        gt = mesh_plotly(target_meshes[k], target_roi_meshes[k], ["Target", "ROI"], ee_pos[k])
-                        comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"],
-                                                 ee_pos[k])
-                        wandb_dict["predicted_mesh0"] = wandb.Plotly(pred)
-                        wandb_dict["target_mesh0"] = wandb.Plotly(gt)
-                        wandb_dict["comparison0"] = wandb.Plotly(comparison)
 
-                    if names[k] == 'Couch_T3' and int(frames[k]) == 60:
-                        pred = mesh_plotly(predicted_meshes[k], predicted_roi_meshes[k], ["Predicted", "ROI"], ee_pos[k])
-                        gt = mesh_plotly(target_meshes[k], target_roi_meshes[k], ["Target", "ROI"], ee_pos[k])
-                        comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"],
-                                                 ee_pos[k])
-                        wandb_dict["predicted_mesh1"] = wandb.Plotly(pred)
-                        wandb_dict["target_mesh1"] = wandb.Plotly(gt)
-                        wandb_dict["comparison1"] = wandb.Plotly(comparison)
+        wandb_dict["chamfer_loss_training"] = total_chamfer_loss / len(dataloader)
+        wandb_dict["normals_loss_training"] = total_normals_loss / len(dataloader)
+        wandb_dict["roi_loss_training"] = total_roi_loss / len(dataloader)
+        wandb_dict["roi_normals_loss_training"] = total_roi_normals_loss / len(dataloader)
+        wandb_dict["total_loss_training"] = total_loss_epoch / len(dataloader)
 
-        if self.log:
-            wandb_dict["chamfer_loss_training"] = total_chamfer_loss / len(dataloader)
-            wandb_dict["normals_loss_training"] = total_normals_loss / len(dataloader)
-            wandb_dict["roi_loss_training"] = total_roi_loss / len(dataloader)
-            wandb_dict["total_loss_training"] = total_loss_epoch / len(dataloader)
-            wandb_dict["no_roi"] = no_roi
-            wandb.log(wandb_dict)
+        return wandb_dict
 
-    def validate(self, dataloader):
+    def validate(self, dataloader, epoch):
         self.decoder.eval()
-        total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch = 0, 0, 0, 0
+        wandb_dict = {}
+        total_chamfer_loss, total_normals_loss = 0, 0
         with torch.no_grad():
             for i, item in enumerate(dataloader):
                 # get data
-                target_meshes, template_vertices, template_faces, template_textures, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
-                print("Validation batch: ", i)
+                target_meshes, template_vertices, template_faces, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
                 batch_size = len(frames)
 
                 # get features from images
                 image_features = self.image_encoder.forward(images)
                 reshaped_features = image_features.view(batch_size, 4000)
+
+                # get force features
+                forces = torch.stack([torch.tensor(data_item['forces']) for data_item in robot_data])
+                ee_position = torch.stack([torch.tensor(data_item['ee_pos']) for data_item in robot_data])
+                forces_input = torch.cat((forces, ee_position), dim=1).to(self.device).float()
+                force_features = self.force_encoder(forces_input)
+                reshaped_features = torch.cat((reshaped_features, force_features), dim=1)
 
                 # predict deformation
                 coordinates = self.decoder.forward(reshaped_features, template_vertices)
@@ -319,21 +296,38 @@ class Training:
                 predicted_mesh_vertices = [coordinates[s][:num_points[s]] for s in range(batch_size)]
                 predicted_meshes = Meshes(verts=predicted_mesh_vertices, faces=template_faces)
 
-                # sample meshes
-                numberOfSampledPoints = 5000
-                predicted_sampled = sample_points_from_meshes(predicted_meshes, numberOfSampledPoints).to(self.device)
-                target_sampled = sample_points_from_meshes(target_meshes, numberOfSampledPoints).to(self.device)
-                chamfer_loss_mesh, _ = chamfer_distance(target_sampled, predicted_sampled)
+                # chamfer loss
+                numberOfSampledPoints = 2500
+                predicted_sampled, normals_predicted = sample_points_from_meshes(predicted_meshes,
+                                                                                 numberOfSampledPoints,
+                                                                                 return_normals=True)
+                target_sampled, normals_target = sample_points_from_meshes(target_meshes, numberOfSampledPoints,
+                                                                           return_normals=True)
+                chamfer_loss_mesh, normals_loss = chamfer_distance(target_sampled, predicted_sampled,
+                                                                   x_normals=normals_target,
+                                                                   y_normals=normals_predicted)
 
                 # roi loss
-                numberOfSampledPoints = 500
+                numberOfSampledPoints = 250
                 ee_pos = [data_item['ee_pos'] for data_item in robot_data]
-                target_roi_meshes = self.get_roi_meshes(target_meshes, ee_pos, 0.2)
-                template_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos, 0.2)
-                target_roi_sampled = sample_points_from_meshes(target_roi_meshes, numberOfSampledPoints).to(self.device)
-                template_roi_sampled = sample_points_from_meshes(template_roi_meshes, numberOfSampledPoints).to(
-                    self.device)
-                chamfer_loss_roi, _ = chamfer_distance(target_roi_sampled, template_roi_sampled)
+                ee_ori = [torch.tensor(np.array(data_item['T_ME'])[:3, :3]) for data_item in robot_data]
+                rotation_matrices = torch.stack(ee_ori)
+                target_roi_meshes = self.get_roi_meshes(target_meshes, ee_pos, rotation_matrices, 0.4, 70)
+                predicted_roi_meshes = self.get_roi_meshes(predicted_meshes, ee_pos, rotation_matrices, 0.25, 50)
+                try:
+                    target_roi_sampled, target_roi_normals = sample_points_from_meshes(target_roi_meshes,
+                                                                                       numberOfSampledPoints,
+                                                                                       return_normals=True)
+                    predicted_roi_sampled, predicted_roi_normals = sample_points_from_meshes(predicted_roi_meshes,
+                                                                                             numberOfSampledPoints,
+                                                                                             return_normals=True)
+                    chamfer_loss_roi, normals_loss_roi = chamfer_distance(target_roi_sampled, predicted_roi_sampled,
+                                                                          x_normals=target_roi_normals,
+                                                                          y_normals=predicted_roi_normals)
+
+                except ValueError:
+                    chamfer_loss_roi = torch.tensor(0.05, device=self.device)
+                    normals_loss_roi = torch.tensor(0.4, device=self.device)
 
                 # # render images from predicted mesh
                 # transformed_mesh = self.transform_meshes(predicted_meshes, centers, scales)
@@ -345,23 +339,32 @@ class Training:
                 # render_loss = self.perceptual_loss(rendered_images, images, masks)
 
                 total_chamfer_loss += chamfer_loss_mesh
-                total_roi_loss += chamfer_loss_roi
-                if i % 10 == 0 and i > 0:
-                    if self.log:
-                        wandb.log({"chamfer_loss_validation": total_chamfer_loss / 10,
-                                   "roi_loss_validation": total_roi_loss / 10})
-                        total_chamfer_loss, total_roi_loss, total_render_loss, total_loss_epoch = 0, 0, 0, 0
+                total_normals_loss += normals_loss
 
-                # log meshes to wandb
-                if self.log:
-                    if i == 0 and batch_size >= 2:
-                        for k in range(4):
-                            pred = mesh_plotly(predicted_meshes[k], template_roi_meshes[k], ["Predicted", "ROI"])
-                            gt = mesh_plotly(target_meshes[k], target_roi_meshes[k], ["Target", "ROI"])
-                            comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"])
-                            wandb.log({f"predicted_mesh{k}": wandb.Plotly(pred)})
-                            wandb.log({f"target_mesh{k}": wandb.Plotly(gt)})
-                            wandb.log({f"comparison{k}": wandb.Plotly(comparison)})
+                if epoch == 1:
+                    if batch_size >1:
+                        self.log_meshes = [{"name": names[0], "frame": frames[0]}, {"name": names[1], "frame": frames[1]}]
+                    else:
+                        self.log_meshes = [{"name": names[0], "frame": frames[0]}]
+
+
+                for k in range(batch_size):
+                    for item in self.log_meshes:
+                        if names[k] == item["name"] and int(frames[k]) == item["frame"]:
+                            pred = mesh_plotly(predicted_meshes[k], predicted_roi_meshes[k], ["Predicted", "ROI"],
+                                               ee_pos[k])
+                            gt = mesh_plotly(target_meshes[k], target_roi_meshes[k], ["Target", "ROI"], ee_pos[k])
+                            comparison = mesh_plotly(target_meshes[k], predicted_meshes[k], ["Target", "Predicted"],
+                                                     ee_pos[k])
+                            wandb_dict[f"predicted_mesh_{item['name']}"] = wandb.Plotly(pred)
+                            wandb_dict[f"target_mesh_{item['name']}"] = wandb.Plotly(gt)
+                            wandb_dict[f"comparison_{item['name']}"] = wandb.Plotly(comparison)
+                break
+
+        wandb_dict["chamfer_loss_validation"] = total_chamfer_loss / len(dataloader)
+        wandb_dict["normals_loss_validation"] = total_normals_loss / len(dataloader)
+
+        return wandb_dict
 
     def transform_meshes(self, meshes, centers, scales):
         transformed_verts = []
@@ -372,7 +375,7 @@ class Training:
             verts = verts / 1000
             transformed_verts.append(verts.float())
 
-        transformed_meshes = Meshes(verts=transformed_verts, faces=meshes.faces_list(), textures=meshes.textures)
+        transformed_meshes = Meshes(verts=transformed_verts, faces=meshes.faces_list())
 
         return transformed_meshes
 
@@ -383,12 +386,19 @@ class Training:
                 print(i)
 
                 # get data
-                target_meshes, template_vertices, template_faces, template_textures, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
+                target_meshes, template_vertices, template_faces, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
                 batch_size = len(frames)
 
                 # get features from images
                 image_features = self.image_encoder.forward(images)
                 reshaped_features = image_features.view(batch_size, 4000)
+
+                # get force features
+                forces = torch.stack([torch.tensor(data_item['forces']) for data_item in robot_data])
+                ee_position = torch.stack([torch.tensor(data_item['ee_pos']) for data_item in robot_data])
+                forces_input = torch.cat((forces, ee_position), dim=1).to(self.device).float()
+                force_features = self.force_encoder(forces_input)
+                reshaped_features = torch.cat((reshaped_features, force_features), dim=1)
 
                 # predict deformation
                 coordinates = self.decoder.forward(reshaped_features, template_vertices)
@@ -396,23 +406,32 @@ class Training:
 
                 # create new source mesh
                 predicted_mesh_vertices = [coordinates[s][:num_points[s]] for s in range(batch_size)]
+                predicted_meshes = Meshes(verts=predicted_mesh_vertices, faces=template_faces)
+                transformed_meshes = self.transform_meshes(predicted_meshes, centers, scales)
 
-                for j in range(len(frames)):
+                for j, mesh in enumerate(transformed_meshes):
                     folder_path = os.path.join(data_path, "out/train", names[j])
                     os.makedirs(folder_path, exist_ok=True)
                     filename = os.path.join(folder_path, f"mesh_f{frames[j]}.obj")
-                    save_obj(filename, predicted_mesh_vertices[j], faces=template_faces[j])
+                    save_obj(filename, mesh.verts_packed(), mesh.faces_packed())
 
             for i, item in enumerate(valid_loader):
                 print(i)
 
                 # get data
-                target_meshes, template_vertices, template_faces, template_textures, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
+                target_meshes, template_vertices, template_faces, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
                 batch_size = len(frames)
 
                 # get features from images
                 image_features = self.image_encoder.forward(images)
                 reshaped_features = image_features.view(batch_size, 4000)
+
+                # get force features
+                forces = torch.stack([torch.tensor(data_item['forces']) for data_item in robot_data])
+                ee_position = torch.stack([torch.tensor(data_item['ee_pos']) for data_item in robot_data])
+                forces_input = torch.cat((forces, ee_position), dim=1).to(self.device).float()
+                force_features = self.force_encoder(forces_input)
+                reshaped_features = torch.cat((reshaped_features, force_features), dim=1)
 
                 # predict deformation
                 coordinates = self.decoder.forward(reshaped_features, template_vertices)
@@ -420,12 +439,16 @@ class Training:
 
                 # create new source mesh
                 predicted_mesh_vertices = [coordinates[s][:num_points[s]] for s in range(batch_size)]
+                predicted_meshes = Meshes(verts=predicted_mesh_vertices, faces=template_faces)
+                transformed_meshes = self.transform_meshes(predicted_meshes, centers, scales)
 
-                for j in range(len(frames)):
+                for j, mesh in enumerate(transformed_meshes):
                     folder_path = os.path.join(data_path, "out/validation", names[j])
                     os.makedirs(folder_path, exist_ok=True)
                     filename = os.path.join(folder_path, f"mesh_f{frames[j]}.obj")
-                    save_obj(filename, predicted_mesh_vertices[j], faces=template_faces[j])
+                    save_obj(filename, mesh.verts_packed(), mesh.faces_packed())
+
+
 
 
 def training_main(args):
@@ -436,15 +459,8 @@ def training_main(args):
     epoch_start = 0
     batch_size = args.batch_size
     lr = args.lr
-    weight_decay = 5e-6
     chamfer_weight = 1
-    roi_weight = 0.0
-    normals_weight = 0.01
-    render_weight = 1
     log = args.log
-    parameters = {"lr": lr, "weight_decay": weight_decay, "chamfer_weight": chamfer_weight,
-                  "render_weight": render_weight, "roi_weight": roi_weight, "normals_weight": normals_weight,
-                  "log": log}
 
     if log:
         wandb.init(
@@ -454,24 +470,29 @@ def training_main(args):
             # track hyperparameters and run metadata
             config={
                 "learning_rate": lr,
-                "model": "homemoorphism, vgg19, 4 images",
-                "weight_decay": weight_decay,
+                "model": "homemoorphism, resnet50, 4 images",
                 "chamfer_weight": chamfer_weight,
-                "render_weight": render_weight,
+                "normals_weight": args.normals_weight,
+                "roi_chamfer_weight": args.roi_chamfer_weight,
+                "roi_normals_weight": args.roi_normals_weight,
                 "batch_size": batch_size,
                 "dataset": "Couch_T1",
                 "epochs": epochs,
             }
         )
 
-    session = Training(device, parameters)
+    session = Training(device, args)
     # get data
     train_loader, valid_loader = session.load_data(data_path, batch_size)
-    print(len(train_loader), len(valid_loader))
+    print("Training dataset size:", len(train_loader), "Validation set size:", len(valid_loader))
 
     for epoch in range(epoch_start, epochs):
         print("Epoch: ", epoch + 1)
-        session.train_epoch(train_loader, epoch + 1)
-        # session.validate(valid_loader)
+        training_dict = session.train_epoch(train_loader, epoch + 1)
+        valid_dict = session.validate(valid_loader, epoch+1)
+        if log:
+            total_dict = {**training_dict, **valid_dict}
+            wandb.log(total_dict)
+        break
 
     session.save_meshes(train_loader, valid_loader, data_path)
