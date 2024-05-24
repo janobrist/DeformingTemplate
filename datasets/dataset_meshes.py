@@ -62,13 +62,13 @@ class Dataset_mesh(Dataset):
         return self.samples[idx]
 
 class DatasetMeshWithImages(Dataset):
-    def __init__(self, root_dir, device):
+    def __init__(self, root_dir, cameras, device):
         self.trg_root = f"{root_dir}/triangle_meshes"
         self.src_root = f"{root_dir}/template_mesh"
         self.image_root = f"{root_dir}/images"
         self.calib_root = f"{root_dir}/calibration"
         self.name = os.path.basename(root_dir)
-        self.camera_names = [name for name in sorted(os.listdir(self.image_root))]
+        self.camera_names = [name for name in cameras]
         self.frames = []
         self.device = device
         self.transformation = transforms.Compose([

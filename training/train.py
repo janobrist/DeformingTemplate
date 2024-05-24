@@ -36,12 +36,15 @@ class Training:
         self.device = device
 
         # models
+        self.force_features = args.force_features
+        self.num_cameras = len(args.cameras)
         self.decoder = self.get_homeomorphism_model().to(self.device)
         #self.image_encoder = vgg19(weights=VGG19_Weights.DEFAULT).eval().to(self.device)
         #self.image_encoder = vit_l_32(weights=ViT_L_32_Weights.DEFAULT).eval().to(self.device)
         self.image_encoder = resnet50(weights=ResNet50_Weights.DEFAULT).eval().to(self.device)
         #self.perceptual_loss = MaskedPerceptualLoss().to(self.device)
         self.force_encoder = ForceFeatures().to(self.device)
+
 
         # optimizer and weights
         params = list(self.force_encoder.parameters()) + list(self.decoder.parameters())
@@ -60,7 +63,11 @@ class Training:
     def get_homeomorphism_model(self):
         n_layers = 6
         # dimension of the code
-        feature_dims = 128
+        if self.force_features:
+            feature_dims = 1000*self.num_cameras + 64
+        else:
+            feature_dims = 1000*self.num_cameras
+
         hidden_size = [128, 64, 32, 32, 32]
         # the dimension of the coordinates to be projected onto
         proj_dims = 128
@@ -69,22 +76,21 @@ class Training:
         block_normalize = True
         normalization = False
 
-        c_dim = 128
-        hidden_dim = 128
-        homeomorphism_decoder = NVP_v2_5_frame(n_layers=n_layers, feature_dims=4064,
+        homeomorphism_decoder = NVP_v2_5_frame(n_layers=n_layers, feature_dims=feature_dims,
                                                hidden_size=hidden_size,
                                                proj_dims=proj_dims, code_proj_hidden_size=code_proj_hidden_size,
                                                proj_type=proj_type,
                                                block_normalize=block_normalize, normalization=normalization)
         return homeomorphism_decoder
 
-    def load_data(self, data_path, batch_size):
+    def load_data(self, data_paths, batch_size, cameras):
         datasets = []
-        for directory in os.listdir(data_path):
-            if directory == "out":
-                continue
-            current_set = DatasetMeshWithImages(os.path.join(data_path, directory), self.device)
-            datasets.append(current_set)
+        for data_path in data_paths:
+            for directory in os.listdir(data_path):
+                if directory == "out":
+                    continue
+                current_set = DatasetMeshWithImages(os.path.join(data_path, directory), cameras, self.device)
+                datasets.append(current_set)
         combined_dataset = ConcatDataset(datasets)
         # split the dataset into training and validation
         total_size = len(combined_dataset)
@@ -184,7 +190,7 @@ class Training:
         self.decoder.train()
         total_chamfer_loss, total_roi_loss, total_loss_epoch, total_normals_loss, total_roi_normals_loss = 0, 0, 0, 0, 0
         for i, item in enumerate(dataloader):
-            print(i)
+            #print(i)
             self.optimizer.zero_grad()
             # get data
             target_meshes, template_vertices, template_faces, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
@@ -192,14 +198,16 @@ class Training:
 
             # get features from images
             image_features = self.image_encoder.forward(images)
-            reshaped_features = image_features.view(batch_size, 4000)
+            reshaped_features = image_features.view(batch_size, 1000*self.num_cameras)
 
             # get force features
-            forces = torch.stack([torch.tensor(data_item['forces']) for data_item in robot_data])
-            ee_position = torch.stack([torch.tensor(data_item['ee_pos']) for data_item in robot_data])
-            forces_input = torch.cat((forces, ee_position), dim=1).to(self.device).float()
-            force_features = self.force_encoder(forces_input)
-            reshaped_features = torch.cat((reshaped_features, force_features), dim=1)
+            if self.force_features:
+                forces = torch.stack([torch.tensor(data_item['forces']) for data_item in robot_data])
+                ee_position = torch.stack([torch.tensor(data_item['ee_pos']) for data_item in robot_data])
+                forces_input = torch.cat((forces, ee_position), dim=1).to(self.device).float()
+                force_features = self.force_encoder(forces_input)
+                reshaped_features = torch.cat((reshaped_features, force_features), dim=1)
+
 
             # predict deformation
             coordinates = self.decoder.forward(reshaped_features, template_vertices)
@@ -259,6 +267,9 @@ class Training:
             self.optimizer.step()
             self.scheduler.step()
 
+            if epoch % 100 == 0:
+                transformed_meshes = self.transform_meshes(predicted_meshes, centers, scales)
+                self.save_meshes(transformed_meshes, names, frames, validation=False)
 
         wandb_dict["chamfer_loss_training"] = total_chamfer_loss / len(dataloader)
         wandb_dict["normals_loss_training"] = total_normals_loss / len(dataloader)
@@ -280,14 +291,16 @@ class Training:
 
                 # get features from images
                 image_features = self.image_encoder.forward(images)
-                reshaped_features = image_features.view(batch_size, 4000)
+                reshaped_features = image_features.view(batch_size, 1000 * self.num_cameras)
 
                 # get force features
-                forces = torch.stack([torch.tensor(data_item['forces']) for data_item in robot_data])
-                ee_position = torch.stack([torch.tensor(data_item['ee_pos']) for data_item in robot_data])
-                forces_input = torch.cat((forces, ee_position), dim=1).to(self.device).float()
-                force_features = self.force_encoder(forces_input)
-                reshaped_features = torch.cat((reshaped_features, force_features), dim=1)
+                if self.force_features:
+                    forces = torch.stack([torch.tensor(data_item['forces']) for data_item in robot_data])
+                    ee_position = torch.stack([torch.tensor(data_item['ee_pos']) for data_item in robot_data])
+                    forces_input = torch.cat((forces, ee_position), dim=1).to(self.device).float()
+                    force_features = self.force_encoder(forces_input)
+                    reshaped_features = torch.cat((reshaped_features, force_features), dim=1)
+
 
                 # predict deformation
                 coordinates = self.decoder.forward(reshaped_features, template_vertices)
@@ -342,8 +355,12 @@ class Training:
                 total_chamfer_loss += chamfer_loss_mesh
                 total_normals_loss += normals_loss
 
+                if epoch % 100 == 0:
+                    transformed_meshes = self.transform_meshes(predicted_meshes, centers, scales)
+                    self.save_meshes(transformed_meshes, names, frames, validation=True)
+
                 if not self.log_meshes:
-                    if batch_size >1:
+                    if batch_size > 1:
                         self.log_meshes = [{"name": names[0], "frame": frames[0]}, {"name": names[1], "frame": frames[1]}]
                     else:
                         self.log_meshes = [{"name": names[0], "frame": frames[0]}]
@@ -380,87 +397,26 @@ class Training:
 
         return transformed_meshes
 
-    def save_meshes(self, train_loader, valid_loader, data_path):
-        self.decoder.eval()
+    def save_meshes(self, meshes, names, frames, validation):
         with torch.no_grad():
-            for i, item in enumerate(train_loader):
-                print(i)
-
-                # get data
-                target_meshes, template_vertices, template_faces, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
-                batch_size = len(frames)
-
-                # get features from images
-                image_features = self.image_encoder.forward(images)
-                reshaped_features = image_features.view(batch_size, 4000)
-
-                # get force features
-                forces = torch.stack([torch.tensor(data_item['forces']) for data_item in robot_data])
-                ee_position = torch.stack([torch.tensor(data_item['ee_pos']) for data_item in robot_data])
-                forces_input = torch.cat((forces, ee_position), dim=1).to(self.device).float()
-                force_features = self.force_encoder(forces_input)
-                reshaped_features = torch.cat((reshaped_features, force_features), dim=1)
-
-                # predict deformation
-                coordinates = self.decoder.forward(reshaped_features, template_vertices)
-                coordinates = coordinates.reshape(batch_size, 9000, 3)
-
-                # create new source mesh
-                predicted_mesh_vertices = [coordinates[s][:num_points[s]] for s in range(batch_size)]
-                predicted_meshes = Meshes(verts=predicted_mesh_vertices, faces=template_faces)
-                transformed_meshes = self.transform_meshes(predicted_meshes, centers, scales)
-
-                for j, mesh in enumerate(transformed_meshes):
-                    folder_path = os.path.join(data_path, "out/train", names[j])
-                    os.makedirs(folder_path, exist_ok=True)
-                    filename = os.path.join(folder_path, f"mesh_f{frames[j]}.obj")
-                    save_obj(filename, mesh.verts_packed(), mesh.faces_packed())
-
-            for i, item in enumerate(valid_loader):
-                print(i)
-
-                # get data
-                target_meshes, template_vertices, template_faces, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
-                batch_size = len(frames)
-
-                # get features from images
-                image_features = self.image_encoder.forward(images)
-                reshaped_features = image_features.view(batch_size, 4000)
-
-                # get force features
-                forces = torch.stack([torch.tensor(data_item['forces']) for data_item in robot_data])
-                ee_position = torch.stack([torch.tensor(data_item['ee_pos']) for data_item in robot_data])
-                forces_input = torch.cat((forces, ee_position), dim=1).to(self.device).float()
-                force_features = self.force_encoder(forces_input)
-                reshaped_features = torch.cat((reshaped_features, force_features), dim=1)
-
-                # predict deformation
-                coordinates = self.decoder.forward(reshaped_features, template_vertices)
-                coordinates = coordinates.reshape(batch_size, 9000, 3)
-
-                # create new source mesh
-                predicted_mesh_vertices = [coordinates[s][:num_points[s]] for s in range(batch_size)]
-                predicted_meshes = Meshes(verts=predicted_mesh_vertices, faces=template_faces)
-                transformed_meshes = self.transform_meshes(predicted_meshes, centers, scales)
-
-                for j, mesh in enumerate(transformed_meshes):
-                    folder_path = os.path.join(data_path, "out/validation", names[j])
-                    os.makedirs(folder_path, exist_ok=True)
-                    filename = os.path.join(folder_path, f"mesh_f{frames[j]}.obj")
-                    save_obj(filename, mesh.verts_packed(), mesh.faces_packed())
-
-
-
+            for i, mesh in enumerate(meshes):
+                if validation:
+                    data_path = f"data/out/validation/{names[i]}"
+                else:
+                    data_path = f"data/out/train/{names[i]}"
+                os.makedirs(data_path, exist_ok=True)
+                file = os.path.join(data_path, f"mesh-f{frames[i]}.obj")
+                save_obj(file, mesh.verts_packed(), mesh.faces_packed())
 
 def training_main(args):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(device)
-    data_path = 'data/Paper'
+    data_paths = []
+    for set in args.datasets:
+        data_paths.append(f"data/{set}")
     epochs = args.epochs
     epoch_start = 1
     batch_size = args.batch_size
-    lr = args.lr
-    chamfer_weight = 1
     log = args.log
 
     if log:
@@ -470,21 +426,23 @@ def training_main(args):
 
             # track hyperparameters and run metadata
             config={
-                "learning_rate": lr,
-                "model": "homemoorphism, resnet50, 4 images",
-                "chamfer_weight": chamfer_weight,
+                "learning_rate": args.lr,
+                "model": "resnet50",
+                "chamfer_weight": args.chamfer_weight,
                 "normals_weight": args.normals_weight,
                 "roi_chamfer_weight": args.roi_chamfer_weight,
                 "roi_normals_weight": args.roi_normals_weight,
                 "batch_size": batch_size,
-                "dataset": "Couch_T1",
+                "dataset": args.datasets,
+                "cameras": len(args.datasets),
                 "epochs": epochs,
+                "force_features": args.force_features,
             }
         )
 
     session = Training(device, args)
     # get data
-    train_loader, valid_loader = session.load_data(data_path, batch_size)
+    train_loader, valid_loader = session.load_data(data_paths, batch_size, args.cameras)
     print("Training dataset size:", len(train_loader), "Validation set size:", len(valid_loader))
 
     for epoch in range(epoch_start, epochs):
@@ -495,4 +453,3 @@ def training_main(args):
             total_dict = {**training_dict, **valid_dict}
             wandb.log(total_dict)
 
-    session.save_meshes(train_loader, valid_loader, data_path)
