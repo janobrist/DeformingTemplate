@@ -51,6 +51,7 @@ class Training:
         self.normals_weight = args.normals_weight
         self.roi_chamfer_weight = args.roi_chamfer_weight
         self.roi_normals_weight = args.roi_normals_weight
+        self.log_meshes = None
 
     def print_memory_usage_class(self):
         for attr, value in self.__dict__.items():
@@ -183,6 +184,7 @@ class Training:
         self.decoder.train()
         total_chamfer_loss, total_roi_loss, total_loss_epoch, total_normals_loss, total_roi_normals_loss = 0, 0, 0, 0, 0
         for i, item in enumerate(dataloader):
+            print(i)
             self.optimizer.zero_grad()
             # get data
             target_meshes, template_vertices, template_faces, images, camera_parameters, centers, scales, frames, num_points, names, robot_data = item
@@ -256,7 +258,6 @@ class Training:
 
             self.optimizer.step()
             self.scheduler.step()
-            break
 
 
         wandb_dict["chamfer_loss_training"] = total_chamfer_loss / len(dataloader)
@@ -341,16 +342,17 @@ class Training:
                 total_chamfer_loss += chamfer_loss_mesh
                 total_normals_loss += normals_loss
 
-                if epoch == 1:
+                if not self.log_meshes:
                     if batch_size >1:
                         self.log_meshes = [{"name": names[0], "frame": frames[0]}, {"name": names[1], "frame": frames[1]}]
                     else:
                         self.log_meshes = [{"name": names[0], "frame": frames[0]}]
 
 
+
                 for k in range(batch_size):
                     for item in self.log_meshes:
-                        if names[k] == item["name"] and int(frames[k]) == item["frame"]:
+                        if names[k] == item["name"] and int(frames[k]) == int(item["frame"]):
                             pred = mesh_plotly(predicted_meshes[k], predicted_roi_meshes[k], ["Predicted", "ROI"],
                                                ee_pos[k])
                             gt = mesh_plotly(target_meshes[k], target_roi_meshes[k], ["Target", "ROI"], ee_pos[k])
@@ -359,7 +361,6 @@ class Training:
                             wandb_dict[f"predicted_mesh_{item['name']}"] = wandb.Plotly(pred)
                             wandb_dict[f"target_mesh_{item['name']}"] = wandb.Plotly(gt)
                             wandb_dict[f"comparison_{item['name']}"] = wandb.Plotly(comparison)
-                break
 
         wandb_dict["chamfer_loss_validation"] = total_chamfer_loss / len(dataloader)
         wandb_dict["normals_loss_validation"] = total_normals_loss / len(dataloader)
@@ -454,9 +455,9 @@ class Training:
 def training_main(args):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(device)
-    data_path = 'data'
+    data_path = 'data/Paper'
     epochs = args.epochs
-    epoch_start = 0
+    epoch_start = 1
     batch_size = args.batch_size
     lr = args.lr
     chamfer_weight = 1
@@ -487,12 +488,11 @@ def training_main(args):
     print("Training dataset size:", len(train_loader), "Validation set size:", len(valid_loader))
 
     for epoch in range(epoch_start, epochs):
-        print("Epoch: ", epoch + 1)
-        training_dict = session.train_epoch(train_loader, epoch + 1)
-        valid_dict = session.validate(valid_loader, epoch+1)
+        print("Epoch: ", epoch)
+        training_dict = session.train_epoch(train_loader, epoch)
+        valid_dict = session.validate(valid_loader, epoch)
         if log:
             total_dict = {**training_dict, **valid_dict}
             wandb.log(total_dict)
-        break
 
     session.save_meshes(train_loader, valid_loader, data_path)
