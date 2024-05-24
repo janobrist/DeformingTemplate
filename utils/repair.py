@@ -24,13 +24,13 @@ def reapir_mesh(mesh_path, output_path):
     o3d.io.write_triangle_mesh(output_path, mesh)
 
 if __name__ == "__main__":
-    num_takes = 10
-    shot = "Couch"
-    for i in range(num_takes):
-        mesh_path = f"../data/{shot}_T{i+1}/template_mesh"
+    shot = "Duvet"
+    path = f"../data/{shot}"
+    for directory in os.listdir(path):
+        mesh_path = os.path.join(path, directory, "template_mesh")
         for file in os.listdir(mesh_path):
             if file.endswith(".obj"):
                 mesh_path = os.path.join(mesh_path, file)
                 break
-        output_path = f"../data/{shot}_T{i+1}/template_mesh/repaired.obj"
+        output_path = os.path.join(path, directory, "template_mesh", "repaired.obj")
         reapir_mesh(mesh_path, output_path)
