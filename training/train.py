@@ -7,7 +7,7 @@ from pytorch3d.ops import sample_points_from_meshes
 from models.nvp_cadex import NVP_v2_5_frame
 from utils.visualization import show_image, inverse_normalize, mesh_plotly
 from models.perceptual_loss import PerceptualLoss, MaskedPerceptualLoss
-from models.feature_extraction import ForceFeatures
+from models.feature_extraction import ForceFeatures, ModifiedResNet50
 from pytorch3d.loss import (
     chamfer_distance,
 )
@@ -41,13 +41,14 @@ class Training:
         self.decoder = self.get_homeomorphism_model().to(self.device)
         #self.image_encoder = vgg19(weights=VGG19_Weights.DEFAULT).eval().to(self.device)
         #self.image_encoder = vit_l_32(weights=ViT_L_32_Weights.DEFAULT).eval().to(self.device)
-        self.image_encoder = resnet50(weights=ResNet50_Weights.DEFAULT).eval().to(self.device)
+        #self.image_encoder = resnet50(weights=ResNet50_Weights.DEFAULT).eval().to(self.device)
+        self.image_encoder = ModifiedResNet50().to(self.device)
         #self.perceptual_loss = MaskedPerceptualLoss().to(self.device)
         self.force_encoder = ForceFeatures().to(self.device)
 
 
         # optimizer and weights
-        params = list(self.force_encoder.parameters()) + list(self.decoder.parameters())
+        params = list(self.force_encoder.parameters()) + list(self.decoder.parameters()) + list(self.image_encoder.resnet50.fc.parameters())
         self.optimizer = optim.Adam(params, lr=args.lr, weight_decay=5e-6)
         self.scheduler = CosineAnnealingLR(self.optimizer, T_max=10000, eta_min=1e-7)
         self.chamfer_weight = args.chamfer_weight
@@ -64,9 +65,9 @@ class Training:
         n_layers = 6
         # dimension of the code
         if self.force_features:
-            feature_dims = 1000*self.num_cameras + 64
+            feature_dims = 128*self.num_cameras + 64
         else:
-            feature_dims = 1000*self.num_cameras
+            feature_dims = 128*self.num_cameras
 
         hidden_size = [128, 64, 32, 32, 32]
         # the dimension of the coordinates to be projected onto
@@ -198,7 +199,7 @@ class Training:
 
             # get features from images
             image_features = self.image_encoder.forward(images)
-            reshaped_features = image_features.view(batch_size, 1000*self.num_cameras)
+            reshaped_features = image_features.view(batch_size, 128*self.num_cameras)
 
             # get force features
             if self.force_features:
@@ -291,7 +292,7 @@ class Training:
 
                 # get features from images
                 image_features = self.image_encoder.forward(images)
-                reshaped_features = image_features.view(batch_size, 1000 * self.num_cameras)
+                reshaped_features = image_features.view(batch_size, 128 * self.num_cameras)
 
                 # get force features
                 if self.force_features:
