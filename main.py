@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--chamfer_weight", type=float, default=1.0)
     parser.add_argument("--roi_chamfer_weight", type=float, default=0.0)
-    parser.add_argument("--normals_weight", type=float, default=0.01)
+    parser.add_argument("--normals_weight", type=float, default=0.0)
     parser.add_argument("--roi_normals_weight", type=float, default=0.0)
     args = parser.parse_args()
 

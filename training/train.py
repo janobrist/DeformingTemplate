@@ -2,14 +2,14 @@ import os
 
 import numpy as np
 import torch
-from pytorch3d.structures import Meshes
+from pytorch3d.structures import Meshes, Pointclouds
 from pytorch3d.ops import sample_points_from_meshes
 from models.nvp_cadex import NVP_v2_5_frame
 from utils.visualization import show_image, inverse_normalize, mesh_plotly
 from models.perceptual_loss import PerceptualLoss, MaskedPerceptualLoss
 from models.feature_extraction import ForceFeatures, ModifiedResNet50
 from pytorch3d.loss import (
-    chamfer_distance,
+    chamfer_distance, point_mesh_face_distance
 )
 from pytorch3d.io import save_obj
 from datasets.dataset_meshes import DatasetMeshWithImages, collate_fn
@@ -189,7 +189,7 @@ class Training:
     def train_epoch(self, dataloader, epoch):
         wandb_dict = {}
         self.decoder.train()
-        total_chamfer_loss, total_roi_loss, total_loss_epoch, total_normals_loss, total_roi_normals_loss = 0, 0, 0, 0, 0
+        total_chamfer_loss, total_roi_loss, total_loss_epoch, total_normals_loss, total_roi_normals_loss, total_point_face_loss = 0, 0, 0, 0, 0, 0
         for i, item in enumerate(dataloader):
             #print(i)
             self.optimizer.zero_grad()
@@ -226,6 +226,9 @@ class Training:
                                                                        return_normals=True)
             chamfer_loss_mesh, normals_loss = chamfer_distance(target_sampled, predicted_sampled, x_normals=normals_target, y_normals=normals_predicted)
 
+            pcl = Pointclouds(predicted_sampled)
+            point_face_loss = point_mesh_face_distance(target_meshes, pcl)
+
             # roi loss
             numberOfSampledPoints = 250
             ee_pos = [data_item['ee_pos'] for data_item in robot_data]
@@ -254,11 +257,12 @@ class Training:
             # render_loss = self.perceptual_loss(rendered_images, images, masks)
 
             # backward pass
-            total_loss = chamfer_loss_mesh * self.chamfer_weight + normals_loss*self.normals_weight + chamfer_loss_roi * self.roi_chamfer_weight + normals_loss_roi * self.roi_normals_weight
+            total_loss = point_face_loss * self.chamfer_weight + normals_loss*self.normals_weight + chamfer_loss_roi * self.roi_chamfer_weight + normals_loss_roi * self.roi_normals_weight
             total_loss.backward()
 
             # losses for logging
             total_chamfer_loss += chamfer_loss_mesh
+            total_point_face_loss += point_face_loss
             total_roi_loss += chamfer_loss_roi
             total_roi_normals_loss += normals_loss_roi
             total_normals_loss += normals_loss
@@ -273,9 +277,10 @@ class Training:
                 self.save_meshes(transformed_meshes, names, frames, validation=False)
 
         wandb_dict["chamfer_loss_training"] = total_chamfer_loss / len(dataloader)
+        wandb_dict["point_face_loss_training"] = total_point_face_loss / len(dataloader)
         wandb_dict["normals_loss_training"] = total_normals_loss / len(dataloader)
         wandb_dict["roi_loss_training"] = total_roi_loss / len(dataloader)
-        wandb_dict["roi_normals_loss_training"] = total_roi_normals_loss / len(dataloader)
+        #wandb_dict["roi_normals_loss_training"] = total_roi_normals_loss / len(dataloader)
         wandb_dict["total_loss_training"] = total_loss_epoch / len(dataloader)
 
         return wandb_dict
@@ -283,7 +288,7 @@ class Training:
     def validate(self, dataloader, epoch):
         self.decoder.eval()
         wandb_dict = {}
-        total_chamfer_loss, total_normals_loss = 0, 0
+        total_chamfer_loss, total_normals_loss, total_point_face_loss = 0, 0, 0
         with torch.no_grad():
             for i, item in enumerate(dataloader):
                 # get data
@@ -321,6 +326,8 @@ class Training:
                 chamfer_loss_mesh, normals_loss = chamfer_distance(target_sampled, predicted_sampled,
                                                                    x_normals=normals_target,
                                                                    y_normals=normals_predicted)
+                pcl = Pointclouds(predicted_sampled)
+                point_face_loss = point_mesh_face_distance(target_meshes, pcl)
 
                 # roi loss
                 numberOfSampledPoints = 250
@@ -354,6 +361,7 @@ class Training:
                 # render_loss = self.perceptual_loss(rendered_images, images, masks)
 
                 total_chamfer_loss += chamfer_loss_mesh
+                total_point_face_loss += point_face_loss
                 total_normals_loss += normals_loss
 
                 if epoch % 100 == 0:
@@ -381,7 +389,8 @@ class Training:
                             wandb_dict[f"comparison_{item['name']}"] = wandb.Plotly(comparison)
 
         wandb_dict["chamfer_loss_validation"] = total_chamfer_loss / len(dataloader)
-        wandb_dict["normals_loss_validation"] = total_normals_loss / len(dataloader)
+        wandb_dict["point_face_loss_validation"] = total_point_face_loss / len(dataloader)
+        #wandb_dict["normals_loss_validation"] = total_normals_loss / len(dataloader)
 
         return wandb_dict
 
@@ -391,7 +400,7 @@ class Training:
             verts = mesh.verts_packed()
             verts = verts * scales[i].to(self.device)
             verts = verts + centers[i].to(self.device)
-            verts = verts / 1000
+            #verts = verts / 1000
             transformed_verts.append(verts.float())
 
         transformed_meshes = Meshes(verts=transformed_verts, faces=meshes.faces_list())
