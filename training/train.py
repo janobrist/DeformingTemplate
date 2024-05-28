@@ -65,7 +65,7 @@ class Training:
         n_layers = 6
         # dimension of the code
         if self.force_features:
-            feature_dims = 128*self.num_cameras + 64
+            feature_dims = 128*self.num_cameras + 32
         else:
             feature_dims = 128*self.num_cameras
 
@@ -462,4 +462,5 @@ def training_main(args):
         if log:
             total_dict = {**training_dict, **valid_dict}
             wandb.log(total_dict)
+    wandb.finish()
 

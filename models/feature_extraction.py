@@ -6,7 +6,7 @@ class ForceFeatures(nn.Module):
     def __init__(self):
         super(ForceFeatures, self).__init__()
         # Define a linear layer that maps 6 input features to 64 output features
-        self.expand_features = nn.Linear(6, 64)
+        self.expand_features = nn.Linear(6, 32)
 
     def forward(self, x):
         # Apply the linear transformation
