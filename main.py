@@ -5,7 +5,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--log", type=bool, default=True)
     parser.add_argument("--batch_size", type=int, default=8)
-    parser.add_argument("--epochs", type=int, default=500)
+    parser.add_argument("--epochs", type=int, default=800)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--datasets", type=list, default=["Paper"])
     parser.add_argument("--cameras", type=list, default=["0068"])

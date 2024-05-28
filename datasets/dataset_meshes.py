@@ -69,9 +69,9 @@ class DatasetMeshWithImages(Dataset):
         self.image_root = f"{root_dir}/images"
         self.calib_root = f"{root_dir}/calibration"
         self.name = os.path.basename(root_dir)
-        camera_names = ["0005", "0029", "0068", "0089"]
-        #self.camera_names = [name for name in cameras]
-        self.camera_names = [camera_names[random.randint(0, 3)]]
+        #camera_names = ["0005", "0029", "0068", "0089"]
+        self.camera_names = [name for name in cameras]
+        #self.camera_names = [camera_names[random.randint(0, 3)]]
         self.frames = []
         self.device = device
         self.transformation = transforms.Compose([
@@ -105,7 +105,6 @@ class DatasetMeshWithImages(Dataset):
         target_mesh_path = os.path.join(self.trg_root, f"mesh-f{frame}.obj")
         target_mesh_vertices, target_mesh_faces, center_target, scale_target = self.load_mesh(target_mesh_path)
         target_mesh = Meshes(verts=[target_mesh_vertices], faces=[target_mesh_faces]).to(self.device)
-        print(self.camera_names)
 
 
         # get template mesh
