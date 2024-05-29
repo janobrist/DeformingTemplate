@@ -85,25 +85,27 @@ class Training:
         return homeomorphism_decoder
 
     def load_data(self, data_paths, batch_size, cameras):
-        valid_sets = ["Paper_T1_Poke1", "Paper_T2_Poke2", "Paper_T3_Poke3", "Paper_T4_Poke4", "Paper_T5_Poke1", "Paper_T6_Poke2", "Paper_T7_Poke3", "Paper_T100_Poke4"]
-        valid_cameras = ["0029"]
+        #valid_sets = ["Paper_T1_Poke1", "Paper_T2_Poke2", "Paper_T3_Poke3", "Paper_T4_Poke4", "Paper_T5_Poke1", "Paper_T6_Poke2", "Paper_T7_Poke3", "Paper_T100_Poke4"]
+        #valid_cameras = ["0029"]
         datasets = []
         valid = []
         for data_path in data_paths:
             for directory in os.listdir(data_path):
-                if directory in valid_sets:
-                    valid.append(DatasetMeshWithImages(os.path.join(data_path, directory), valid_cameras, self.device))
-                else:
-                    current_set = DatasetMeshWithImages(os.path.join(data_path, directory), cameras, self.device)
-                    datasets.append(current_set)
+                if directory == "out":
+                    continue
+                # if directory in valid_sets:
+                #     valid.append(DatasetMeshWithImages(os.path.join(data_path, directory), valid_cameras, self.device))
+                # else:
+                current_set = DatasetMeshWithImages(os.path.join(data_path, directory), cameras, self.device)
+                datasets.append(current_set)
         combined_dataset = ConcatDataset(datasets)
-        valid_dataset = ConcatDataset(valid)
+        #valid_dataset = ConcatDataset(valid)
         # split the dataset into training and validation
-        # total_size = len(combined_dataset)
-        # validation_fraction = 0.15
-        # valid_size = int(total_size * validation_fraction)
-        # train_size = total_size - valid_size  # Rest will be for training
-        # train_dataset, valid_dataset = random_split(combined_dataset, [train_size, valid_size])
+        total_size = len(combined_dataset)
+        validation_fraction = 0.15
+        valid_size = int(total_size * validation_fraction)
+        train_size = total_size - valid_size  # Rest will be for training
+        train_dataset, valid_dataset = random_split(combined_dataset, [train_size, valid_size])
 
         train_dataloader = DataLoader(combined_dataset, batch_size=batch_size, shuffle=True,
                                       collate_fn=lambda b, device=self.device: collate_fn(b, device), drop_last=True)

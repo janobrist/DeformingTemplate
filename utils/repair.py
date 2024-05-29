@@ -24,7 +24,7 @@ def reapir_mesh(mesh_path, output_path):
     o3d.io.write_triangle_mesh(output_path, mesh)
 
 if __name__ == "__main__":
-    shot = "Paper"
+    shot = "Duvet"
     path = f"../data/{shot}"
     for directory in os.listdir(path):
         mesh_path = os.path.join(path, directory, "template_mesh")
