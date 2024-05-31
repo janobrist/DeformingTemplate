@@ -451,7 +451,7 @@ def training_main(args):
                 "roi_normals_weight": args.roi_normals_weight,
                 "batch_size": batch_size,
                 "dataset": args.datasets,
-                "cameras": len(args.datasets),
+                "cameras": len(args.cameras),
                 "epochs": epochs,
                 "force_features": args.force_features,
             }
